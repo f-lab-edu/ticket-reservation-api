@@ -1,0 +1,24 @@
+services:
+  mysql:
+    image: mysql:8.4.6
+    container_name: ticketing-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ticketing
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required. Check .env}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required. Check .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required. Check .env}
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # 초기화 중 임시 서버는 TCP를 열지 않으므로 127.0.0.1로 접속해 실제 기동 완료를 확인한다.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  mysql-data:
