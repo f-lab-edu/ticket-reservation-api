@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: ticket-reservation-api
+  datasource:
+    # 기본값은 Docker Compose로 실행한 로컬 MySQL(compose.yaml) 기준이다.
+    url: ${DB_URL:jdbc:mysql://localhost:3307/ticketing}
+    username: ${DB_USERNAME:ticketing_app}
+    # 비밀번호는 기본값 없이 환경변수로만 주입한다.
+    password: ${DB_PASSWORD}
