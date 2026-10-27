@@ -14,20 +14,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class DatabaseConnectionTest {
 
-	@Autowired
-	private JdbcTemplate jdbcTemplate;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
-	@Test
-	void selectOne() {
-		Integer result = jdbcTemplate.queryForObject("SELECT 1", Integer.class);
+  @Test
+  void selectOne() {
+    Integer result = jdbcTemplate.queryForObject("SELECT 1", Integer.class);
 
-		assertThat(result).isEqualTo(1);
-	}
+    assertThat(result).isEqualTo(1);
+  }
 
-	@Test
-	void connectsToTicketingDatabase() {
-		String database = jdbcTemplate.queryForObject("SELECT DATABASE()", String.class);
+  @Test
+  void connectsToTicketingDatabase() {
+    String database = jdbcTemplate.queryForObject("SELECT DATABASE()", String.class);
 
-		assertThat(database).isEqualTo("ticketing");
-	}
+    assertThat(database).isEqualTo("ticketing");
+  }
 }
