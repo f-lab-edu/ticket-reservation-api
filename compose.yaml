@@ -5,9 +5,10 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ticketing
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required. Check .env}
-      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required. Check .env}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required. Check .env}
+      # 기본값은 로컬 개발 전용이다. .env 또는 환경변수로 값을 지정하면 그 값이 우선한다.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local-root-password}
+      MYSQL_USER: ${MYSQL_USER:-ticketing_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local-app-password}
     ports:
       - "127.0.0.1:3307:3306"
     volumes:
