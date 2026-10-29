@@ -96,7 +96,7 @@ class MemberServiceIntegrationTest {
     int successCount = 0;
     int duplicateCount = 0;
     for (Future<Boolean> result : results) {
-      if (result.get()) {
+      if (Boolean.TRUE.equals(result.get())) {
         successCount++;
       } else {
         duplicateCount++;

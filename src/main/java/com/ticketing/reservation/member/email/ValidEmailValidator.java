@@ -14,7 +14,7 @@ public class ValidEmailValidator implements ConstraintValidator<ValidEmail, Stri
 
   // 4.1.1.1, 4.1.1.2: 허용 문자 묶음(atom)을 마침표 하나로만 이어 붙여 시작·끝·연속 마침표를 막는다.
   private static final String ATOM = "[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+";
-  private static final Pattern LOCAL_PART = Pattern.compile(ATOM + "(\\." + ATOM + ")*");
+  private static final Pattern LOCAL_PART = Pattern.compile(ATOM + "(\\." + ATOM + ")*+");
 
   // 4.1.1.3, 4.1.1.4: 영문자·숫자로 시작하고 끝나며, 가운데에만 하이픈을 허용한다.
   private static final Pattern LABEL = Pattern.compile("[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?");
