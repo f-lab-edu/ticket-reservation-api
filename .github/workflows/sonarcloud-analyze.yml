@@ -48,6 +48,10 @@ jobs:
           args:
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
             -Dsonar.organization=f-lab-edu-1
+            -Dsonar.sources=.
+            -Dsonar.exclusions=src/test/**
+            -Dsonar.tests=.
+            -Dsonar.test.inclusions=src/test/**
             -Dsonar.java.binaries=build/classes/java/main
             -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
 
