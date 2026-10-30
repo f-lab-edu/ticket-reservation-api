@@ -24,3 +24,15 @@ jobs:
 
       - name: Build and test
         run: ./gradlew check
+
+      # 테스트가 실패해도 원인을 확인할 수 있도록 항상 업로드한다.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-reports
+          path: |
+            build/reports/tests/test/
+            build/test-results/test/
+            build/reports/jacoco/test/html/
+          retention-days: 7
