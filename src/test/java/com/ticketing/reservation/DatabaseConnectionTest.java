@@ -22,7 +22,7 @@ class DatabaseConnectionTest {
   void selectOne() {
     Integer result = jdbcTemplate.queryForObject("SELECT 1", Integer.class);
 
-    assertThat(result).isEqualTo(1);
+    assertThat(result).isEqualTo(2);
   }
 
   @Test
