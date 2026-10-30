@@ -21,20 +21,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
 @ExtendWith(MockitoExtension.class)
-class MemberServiceTest {
+class MemberRegistrarTest {
 
   @Mock private MemberRepository memberRepository;
-  @Mock private PasswordEncoder passwordEncoder;
 
-  @InjectMocks private MemberService memberService;
+  @InjectMocks private MemberRegistrar memberRegistrar;
 
   @BeforeEach
   void setUp() {
     given(memberRepository.existsByEmail(anyString())).willReturn(false);
-    given(passwordEncoder.encode(anyString())).willReturn("{bcrypt}hash");
   }
 
   @Test
@@ -43,7 +40,7 @@ class MemberServiceTest {
         .willThrow(constraintViolation("member.uk_member_email"));
 
     assertThatExceptionOfType(BusinessException.class)
-        .isThrownBy(() -> memberService.signUp("user@example.com", "password"))
+        .isThrownBy(() -> memberRegistrar.register("user@example.com", "{bcrypt}hash"))
         .extracting(BusinessException::getErrorCode)
         .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
   }
@@ -55,7 +52,7 @@ class MemberServiceTest {
     DataIntegrityViolationException violation = constraintViolation(constraintName);
     given(memberRepository.saveAndFlush(any())).willThrow(violation);
 
-    assertThatThrownBy(() -> memberService.signUp("user@example.com", "password"))
+    assertThatThrownBy(() -> memberRegistrar.register("user@example.com", "{bcrypt}hash"))
         .isSameAs(violation);
   }
 

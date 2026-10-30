@@ -1,12 +1,8 @@
 package com.ticketing.reservation.member.service;
 
-import com.ticketing.reservation.global.error.BusinessException;
-import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.email.EmailNormalizer;
 import com.ticketing.reservation.member.repository.MemberRepository;
-import org.hibernate.exception.ConstraintViolationException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,10 +12,15 @@ public class MemberService {
 
   private final MemberRepository memberRepository;
   private final PasswordEncoder passwordEncoder;
+  private final MemberRegistrar memberRegistrar;
 
-  public MemberService(MemberRepository memberRepository, PasswordEncoder passwordEncoder) {
+  public MemberService(
+      MemberRepository memberRepository,
+      PasswordEncoder passwordEncoder,
+      MemberRegistrar memberRegistrar) {
     this.memberRepository = memberRepository;
     this.passwordEncoder = passwordEncoder;
+    this.memberRegistrar = memberRegistrar;
   }
 
   @Transactional(readOnly = true)
@@ -29,24 +30,8 @@ public class MemberService {
 
   public Member signUp(String email, String rawPassword) {
     String normalizedEmail = EmailNormalizer.normalize(email);
-    if (memberRepository.existsByEmail(normalizedEmail)) {
-      throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
-    }
+    String encodedPassword = passwordEncoder.encode(rawPassword);
 
-    Member member = Member.create(normalizedEmail, passwordEncoder.encode(rawPassword));
-    try {
-      return memberRepository.saveAndFlush(member);
-    } catch (DataIntegrityViolationException e) {
-      if (isEmailUniqueViolation(e)) {
-        throw new BusinessException(ErrorCode.DUPLICATE_EMAIL, e);
-      }
-      throw e;
-    }
-  }
-
-  private boolean isEmailUniqueViolation(DataIntegrityViolationException e) {
-    return e.getCause() instanceof ConstraintViolationException cause
-        && cause.getConstraintName() != null
-        && cause.getConstraintName().endsWith(Member.EMAIL_UNIQUE_CONSTRAINT);
+    return memberRegistrar.register(normalizedEmail, encodedPassword);
   }
 }
