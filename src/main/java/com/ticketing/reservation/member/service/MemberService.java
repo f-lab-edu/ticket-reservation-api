@@ -27,7 +27,6 @@ public class MemberService {
     return !memberRepository.existsByEmail(EmailNormalizer.normalize(email));
   }
 
-  @Transactional
   public Member signUp(String email, String rawPassword) {
     String normalizedEmail = EmailNormalizer.normalize(email);
     if (memberRepository.existsByEmail(normalizedEmail)) {
