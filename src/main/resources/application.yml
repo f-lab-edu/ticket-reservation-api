@@ -8,5 +8,6 @@ spring:
     password: ${DB_PASSWORD:local-app-password}
   jpa:
     hibernate:
-      ddl-auto: update
+      # 스키마는 Flyway 마이그레이션(db/migration)으로 관리하고, Hibernate는 엔티티와 일치하는지만 검증한다.
+      ddl-auto: validate
     open-in-view: false
