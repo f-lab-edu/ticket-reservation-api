@@ -12,11 +12,11 @@ import org.testcontainers.utility.DockerImageName;
 //  현재는 Spring 테스트 컨텍스트(@JdbcTest, @SpringBootTest 등)마다 컨테이너가 따로 뜬다.
 //  공유 시 테스트 간 데이터가 남으므로 @Transactional 롤백 또는 테스트별 데이터 정리를 함께 적용한다.
 @TestConfiguration(proxyBeanMethods = false)
-class TestcontainersConfiguration {
+public class TestcontainersConfiguration {
 
   @Bean
   @ServiceConnection
-  MySQLContainer<?> mysqlContainer() {
+  public MySQLContainer<?> mysqlContainer() {
     return new MySQLContainer<>(DockerImageName.parse("mysql:8.4.6")).withDatabaseName("ticketing");
   }
 }

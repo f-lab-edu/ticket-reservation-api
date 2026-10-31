@@ -6,3 +6,8 @@ spring:
     url: ${DB_URL:jdbc:mysql://localhost:3307/ticketing}
     username: ${DB_USERNAME:ticketing_app}
     password: ${DB_PASSWORD:local-app-password}
+  jpa:
+    hibernate:
+      # 스키마는 Flyway 마이그레이션(db/migration)으로 관리하고, Hibernate는 엔티티와 일치하는지만 검증한다.
+      ddl-auto: validate
+    open-in-view: false
