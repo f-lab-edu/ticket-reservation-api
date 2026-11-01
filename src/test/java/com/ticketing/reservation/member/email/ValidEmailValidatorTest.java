@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -15,6 +16,7 @@ class ValidEmailValidatorTest {
   private final ValidEmailValidator validator = new ValidEmailValidator();
 
   @ParameterizedTest
+  @DisplayName("형식이 올바른 이메일은 통과한다")
   @ValueSource(
       strings = {
         "user@example.com",
@@ -26,17 +28,19 @@ class ValidEmailValidatorTest {
         "  user@example.com  ",
         "\tuser@example.com\n"
       })
-  void 형식이_올바른_이메일은_통과한다(String email) {
+  void acceptsValidEmail(String email) {
     assertThat(validator.isValid(email, null)).isTrue();
   }
 
   // 필수 여부는 @NotBlank가 검증한다.
   @Test
-  void null은_통과시킨다() {
+  @DisplayName("null은 통과시킨다")
+  void acceptsNullEmail() {
     assertThat(validator.isValid(null, null)).isTrue();
   }
 
   @ParameterizedTest
+  @DisplayName("형식이 올바르지 않은 이메일은 실패한다")
   @ValueSource(
       strings = {
         "",
@@ -68,13 +72,14 @@ class ValidEmailValidatorTest {
         "user@example-.com",
         "user@example.-com"
       })
-  void 형식이_올바르지_않은_이메일은_실패한다(String email) {
+  void rejectsInvalidEmail(String email) {
     assertThat(validator.isValid(email, null)).isFalse();
   }
 
   @ParameterizedTest
+  @DisplayName("길이 제한의 경계값을 검증한다")
   @MethodSource("lengthBoundaries")
-  void 길이_제한의_경계값을_검증한다(String email, boolean expected) {
+  void validatesEmailLengthBoundaries(String email, boolean expected) {
     assertThat(validator.isValid(email, null)).isEqualTo(expected);
   }
 

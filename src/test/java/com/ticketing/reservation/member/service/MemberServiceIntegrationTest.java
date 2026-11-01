@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,7 +37,8 @@ class MemberServiceIntegrationTest {
   }
 
   @Test
-  void 회원_가입하면_정규화된_이메일과_해시된_비밀번호를_저장한다() {
+  @DisplayName("회원 가입하면 정규화된 이메일과 해시된 비밀번호를 저장한다")
+  void savesNormalizedEmailAndEncodedPassword() {
     Member member = memberService.signUp("  User@Example.COM ", "password");
 
     Member saved = memberRepository.findById(member.getId()).orElseThrow();
@@ -46,7 +48,8 @@ class MemberServiceIntegrationTest {
   }
 
   @Test
-  void 정규화된_이메일이_같으면_가입할_수_없다() {
+  @DisplayName("정규화된 이메일이 같으면 가입할 수 없다")
+  void rejectsSignUpWhenNormalizedEmailIsDuplicate() {
     memberService.signUp("user@example.com", "password");
 
     assertThatExceptionOfType(BusinessException.class)
@@ -57,7 +60,8 @@ class MemberServiceIntegrationTest {
   }
 
   @Test
-  void 이메일_중복_확인은_정규화된_이메일로_판단한다() {
+  @DisplayName("이메일 중복 확인은 정규화된 이메일로 판단한다")
+  void checksAvailabilityUsingNormalizedEmail() {
     memberService.signUp("user@example.com", "password");
 
     assertThat(memberService.isEmailAvailable(" User@Example.com ")).isFalse();
@@ -65,7 +69,8 @@ class MemberServiceIntegrationTest {
   }
 
   @Test
-  void 같은_이메일로_동시에_가입해도_회원은_하나만_생성된다() throws Exception {
+  @DisplayName("같은 이메일로 동시에 가입해도 회원은 하나만 생성된다")
+  void createsOnlyOneMemberForConcurrentSignUpsWithSameEmail() throws Exception {
     int threadCount = 10;
     ExecutorService executor = Executors.newFixedThreadPool(threadCount);
     CountDownLatch ready = new CountDownLatch(threadCount);

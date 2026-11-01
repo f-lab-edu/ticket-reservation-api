@@ -14,6 +14,7 @@ import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.service.MemberService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -32,7 +33,8 @@ class MemberControllerTest {
   @MockitoBean private MemberService memberService;
 
   @Test
-  void 사용_가능한_이메일이면_available_true를_반환한다() throws Exception {
+  @DisplayName("사용 가능한 이메일이면 available true를 반환한다")
+  void returnsAvailableWhenEmailIsAvailable() throws Exception {
     given(memberService.isEmailAvailable("user@example.com")).willReturn(true);
 
     mockMvc
@@ -42,7 +44,8 @@ class MemberControllerTest {
   }
 
   @Test
-  void 이미_사용_중인_이메일이면_available_false를_반환한다() throws Exception {
+  @DisplayName("이미 사용 중인 이메일이면 available false를 반환한다")
+  void returnsUnavailableWhenEmailIsAlreadyInUse() throws Exception {
     given(memberService.isEmailAvailable("user@example.com")).willReturn(false);
 
     mockMvc
@@ -52,8 +55,9 @@ class MemberControllerTest {
   }
 
   @ParameterizedTest
+  @DisplayName("중복 확인에서 이메일이 유효하지 않으면 400을 반환한다")
   @ValueSource(strings = {" ", "user@localhost"})
-  void 중복_확인에서_이메일이_유효하지_않으면_400을_반환한다(String email) throws Exception {
+  void returnsBadRequestWhenEmailIsInvalid(String email) throws Exception {
     mockMvc
         .perform(get("/api/v1/members/email-availability").param("email", email))
         .andExpect(status().isBadRequest());
@@ -62,14 +66,16 @@ class MemberControllerTest {
   }
 
   @Test
-  void 중복_확인에서_이메일_파라미터가_없으면_400을_반환한다() throws Exception {
+  @DisplayName("중복 확인에서 이메일 파라미터가 없으면 400을 반환한다")
+  void returnsBadRequestWhenEmailParameterIsMissing() throws Exception {
     mockMvc.perform(get("/api/v1/members/email-availability")).andExpect(status().isBadRequest());
 
     verifyNoInteractions(memberService);
   }
 
   @Test
-  void 회원_가입에_성공하면_201과_회원_정보를_반환한다() throws Exception {
+  @DisplayName("회원 가입에 성공하면 201과 회원 정보를 반환한다")
+  void returnsCreatedWithMemberInfoWhenSignUpSucceeds() throws Exception {
     Member member = Member.create("user@example.com", "{bcrypt}hash");
     ReflectionTestUtils.setField(member, "id", 1L);
     given(memberService.signUp(anyString(), anyString())).willReturn(member);
@@ -90,6 +96,7 @@ class MemberControllerTest {
   }
 
   @ParameterizedTest
+  @DisplayName("회원 가입에서 요청값이 유효하지 않으면 400을 반환한다")
   @ValueSource(
       strings = {
         """
@@ -99,7 +106,7 @@ class MemberControllerTest {
         {"email": "user..name@example.com", "password": "password"}
         """
       })
-  void 회원_가입에서_요청값이_유효하지_않으면_400을_반환한다(String body) throws Exception {
+  void returnsBadRequestWhenSignUpRequestIsInvalid(String body) throws Exception {
     mockMvc
         .perform(post("/api/v1/members").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isBadRequest());
@@ -108,7 +115,8 @@ class MemberControllerTest {
   }
 
   @Test
-  void 이미_사용_중인_이메일로_가입하면_409와_오류_코드를_반환한다() throws Exception {
+  @DisplayName("이미 사용 중인 이메일로 가입하면 409와 오류 코드를 반환한다")
+  void returnsConflictWhenEmailIsAlreadyInUse() throws Exception {
     given(memberService.signUp(any(), any()))
         .willThrow(new BusinessException(ErrorCode.DUPLICATE_EMAIL));
 

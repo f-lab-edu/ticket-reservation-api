@@ -12,6 +12,7 @@ import com.ticketing.reservation.member.repository.MemberRepository;
 import java.sql.SQLIntegrityConstraintViolationException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -35,7 +36,8 @@ class MemberRegistrarTest {
   }
 
   @Test
-  void 이메일_유니크_제약을_위반하면_이메일_중복_예외로_변환한다() {
+  @DisplayName("이메일 유니크 제약을 위반하면 이메일 중복 예외로 변환한다")
+  void translatesEmailUniqueViolationToDuplicateEmailException() {
     given(memberRepository.saveAndFlush(any()))
         .willThrow(constraintViolation("member.uk_member_email"));
 
@@ -46,9 +48,10 @@ class MemberRegistrarTest {
   }
 
   @ParameterizedTest
+  @DisplayName("이메일 유니크 제약이 아닌 제약을 위반하면 이메일 중복으로 변환하지 않는다")
   @NullSource
   @ValueSource(strings = "member.uk_member_nickname")
-  void 이메일_유니크_제약이_아닌_제약을_위반하면_이메일_중복으로_변환하지_않는다(String constraintName) {
+  void propagatesNonEmailConstraintViolation(String constraintName) {
     DataIntegrityViolationException violation = constraintViolation(constraintName);
     given(memberRepository.saveAndFlush(any())).willThrow(violation);
 
