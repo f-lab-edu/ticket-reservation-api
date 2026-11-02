@@ -104,6 +104,9 @@ class MemberControllerTest {
         """,
         """
         {"email": "user..name@example.com", "password": "password"}
+        """,
+        """
+        {"email": "user@example.com", "password": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
         """
       })
   void returnsBadRequestWhenSignUpRequestIsInvalid(String body) throws Exception {
