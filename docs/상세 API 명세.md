@@ -56,6 +56,7 @@ Authorization: Bearer {accessToken}
 | Bearer 토큰을 보내지 않음 (`Authorization` 헤더가 없거나 Basic 등 다른 인증 방식) | 401 | `UNAUTHORIZED` | `Bearer` |
 | 액세스 토큰이 만료됐거나 서명·형식이 올바르지 않음 | 401 | `UNAUTHORIZED` | `Bearer error="invalid_token", error_description="...", error_uri="..."` |
 
+- 액세스 토큰 만료는 60초의 기본 허용 오차를 두고 판정합니다. 만료 시각(`exp`)이 지난 뒤 60초 이내의 토큰은 아직 유효한 것으로 처리합니다.
 - 인증이 필요 없는 API는 `Authorization` 헤더를 확인하지 않습니다. 만료된 토큰을 붙여 호출해도 거절되지 않습니다.
 
 ## 2. 회원
