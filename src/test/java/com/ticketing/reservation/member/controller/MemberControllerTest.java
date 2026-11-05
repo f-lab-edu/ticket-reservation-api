@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ticketing.reservation.auth.config.JwtConfig;
+import com.ticketing.reservation.global.config.SecurityConfig;
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.member.domain.Member;
@@ -20,12 +22,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(MemberController.class)
+@Import({SecurityConfig.class, JwtConfig.class})
 class MemberControllerTest {
 
   @Autowired private MockMvc mockMvc;

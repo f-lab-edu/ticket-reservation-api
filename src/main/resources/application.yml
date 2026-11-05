@@ -1,6 +1,9 @@
 spring:
   application:
     name: ticket-reservation-api
+  config:
+    # 로컬 개발 시 프로젝트 루트의 .env(Git 제외)에서 JWT_SECRET 등을 읽는다. 파일이 없으면 무시한다.
+    import: optional:file:.env[.properties]
   datasource:
     # 기본값은 Docker Compose로 실행한 로컬 MySQL(compose.yaml) 기준이다.
     url: ${DB_URL:jdbc:mysql://localhost:3307/ticketing}
@@ -11,3 +14,8 @@ spring:
       # 스키마는 Flyway 마이그레이션(db/migration)으로 관리하고, Hibernate는 엔티티와 일치하는지만 검증한다.
       ddl-auto: validate
     open-in-view: false
+
+auth:
+  # HS256 서명 키(32바이트 이상). 기본값을 두지 않아 설정이 없으면 기동에 실패한다.
+  jwt-secret: ${JWT_SECRET}
+  access-token-validity: 30m
