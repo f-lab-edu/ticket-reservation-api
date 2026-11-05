@@ -28,6 +28,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,43 +40,65 @@ class SecurityConfigTest {
 
   private static final String PROTECTED_PATH = "/test/protected";
   private static final String PUBLIC_PATH = "/api/v1/auth/login";
+  private static final Duration DEFAULT_CLOCK_SKEW = Duration.ofSeconds(60);
 
   @Autowired private MockMvc mockMvc;
   @Autowired private JwtEncoder jwtEncoder;
   @Autowired private AuthProperties properties;
 
   @Test
-  @DisplayName("유효한 액세스 토큰이면 회원 식별자와 권한으로 인증된다")
+  @DisplayName("유효한 토큰이면 회원 식별자와 권한으로 인증된다")
   void authenticatesWithValidAccessToken() throws Exception {
+    // given
     String token = providerAt(Instant.now()).issue(member(7L));
 
-    mockMvc
-        .perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+    // when
+    ResultActions result =
+        mockMvc.perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.name").value("7"))
         .andExpect(jsonPath("$.authorities[0]").value("ROLE_USER"));
   }
 
   @Test
-  @DisplayName("액세스 토큰이 없으면 401과 UNAUTHORIZED 오류 응답을 반환한다")
+  @DisplayName("토큰이 없으면 401을 반환한다")
   void returnsUnauthorizedWithoutAccessToken() throws Exception {
-    mockMvc.perform(get(PROTECTED_PATH)).andExpect(unauthorizedProblemDetail());
+    // when
+    ResultActions result = mockMvc.perform(get(PROTECTED_PATH));
+
+    // then
+    result.andExpect(unauthorizedProblemDetail());
   }
 
   @Test
-  @DisplayName("액세스 토큰이 유효하지 않으면 401과 UNAUTHORIZED 오류 응답을 반환한다")
+  @DisplayName("만료된 토큰이면 401을 반환한다")
   void returnsUnauthorizedWithInvalidAccessToken() throws Exception {
-    mockMvc
-        .perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + expiredToken()))
-        .andExpect(unauthorizedProblemDetail());
+    // given
+    String token = expiredToken();
+
+    // when
+    ResultActions result =
+        mockMvc.perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result.andExpect(unauthorizedProblemDetail());
   }
 
   @Test
-  @DisplayName("공개 API는 만료된 액세스 토큰을 보내도 거절하지 않는다")
+  @DisplayName("공개 API는 만료된 토큰이어도 허용한다")
   void ignoresAccessTokenOnPublicEndpoint() throws Exception {
-    mockMvc
-        .perform(post(PUBLIC_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + expiredToken()))
-        .andExpect(status().isOk());
+    // given
+    String token = expiredToken();
+
+    // when
+    ResultActions result =
+        mockMvc.perform(post(PUBLIC_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result.andExpect(status().isOk());
   }
 
   private ResultMatcher unauthorizedProblemDetail() {
@@ -90,7 +113,10 @@ class SecurityConfigTest {
 
   private String expiredToken() {
     Instant issuedAt =
-        Instant.now().minus(properties.accessTokenValidity()).minus(Duration.ofMinutes(2));
+        Instant.now()
+            .minus(properties.accessTokenValidity())
+            .minus(DEFAULT_CLOCK_SKEW)
+            .minusSeconds(1);
     return providerAt(issuedAt).issue(member(7L));
   }
 

@@ -1,7 +1,7 @@
 package com.ticketing.reservation.auth.controller;
 
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -19,10 +19,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 @WebMvcTest(AuthController.class)
 @Import({SecurityConfig.class, JwtConfig.class})
@@ -37,16 +37,21 @@ class AuthControllerTest {
   @Test
   @DisplayName("로그인에 성공하면 200과 토큰을 반환한다")
   void returnsTokensWhenLoginSucceeds() throws Exception {
+    // given
     given(authService.login("user@example.com", "password")).willReturn(TOKENS);
 
-    mockMvc
-        .perform(
+    // when
+    ResultActions result =
+        mockMvc.perform(
             post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """
                     {"email": "user@example.com", "password": "password"}
-                    """))
+                    """));
+
+    // then
+    result
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tokenType").value("Bearer"))
         .andExpect(jsonPath("$.accessToken").value("access-token"))
@@ -54,42 +59,30 @@ class AuthControllerTest {
   }
 
   @Test
-  @DisplayName("로그인에 실패하면 401과 오류 코드를 반환한다")
+  @DisplayName("로그인에 실패하면 401을 반환한다")
   void returnsUnauthorizedWhenLoginFails() throws Exception {
+    // given
     given(authService.login("user@example.com", "wrong"))
         .willThrow(new BusinessException(ErrorCode.INVALID_CREDENTIALS));
 
-    mockMvc
-        .perform(
+    // when
+    ResultActions result =
+        mockMvc.perform(
             post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """
                     {"email": "user@example.com", "password": "wrong"}
-                    """))
+                    """));
+
+    // then
+    result
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
   }
 
-  @Test
-  @DisplayName("만료된 액세스 토큰을 헤더에 붙여도 로그인을 처리한다")
-  void ignoresAuthorizationHeaderOnLogin() throws Exception {
-    given(authService.login("user@example.com", "password")).willReturn(TOKENS);
-
-    mockMvc
-        .perform(
-            post("/api/v1/auth/login")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer expired.or.invalid")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    """
-                    {"email": "user@example.com", "password": "password"}
-                    """))
-        .andExpect(status().isOk());
-  }
-
   @ParameterizedTest
-  @DisplayName("로그인 요청값이 유효하지 않으면 400을 반환한다")
+  @DisplayName("유효하지 않은 요청값이면 400을 반환한다")
   @ValueSource(
       strings = {
         """
@@ -103,10 +96,13 @@ class AuthControllerTest {
         """
       })
   void returnsBadRequestWhenLoginRequestIsInvalid(String body) throws Exception {
-    mockMvc
-        .perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body))
-        .andExpect(status().isBadRequest());
+    // when
+    ResultActions result =
+        mockMvc.perform(
+            post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body));
 
-    verifyNoInteractions(authService);
+    // then
+    result.andExpect(status().isBadRequest());
+    then(authService).shouldHaveNoInteractions();
   }
 }

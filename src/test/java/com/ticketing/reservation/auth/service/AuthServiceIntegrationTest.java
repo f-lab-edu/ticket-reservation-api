@@ -1,7 +1,7 @@
 package com.ticketing.reservation.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.ticketing.reservation.TestcontainersConfiguration;
 import com.ticketing.reservation.auth.config.AuthProperties;
@@ -50,10 +50,15 @@ class AuthServiceIntegrationTest {
   }
 
   @Test
-  @DisplayName("이메일과 비밀번호가 맞으면 회원 식별자와 권한을 담은 액세스 토큰을 발급한다")
+  @DisplayName("인증 정보가 맞으면 액세스 토큰을 발급한다")
   void issuesAccessTokenWhenCredentialsAreValid() {
-    TokenResponse tokens = authService.login(" User@Example.com ", PASSWORD);
+    // given
+    String email = " User@Example.com ";
 
+    // when
+    TokenResponse tokens = authService.login(email, PASSWORD);
+
+    // then
     Jwt jwt = jwtDecoder.decode(tokens.accessToken());
     assertThat(jwt.getSubject()).isEqualTo(String.valueOf(member.getId()));
     assertThat(jwt.getClaimAsString(AccessTokenProvider.ROLE_CLAIM)).isEqualTo("USER");
@@ -66,11 +71,15 @@ class AuthServiceIntegrationTest {
     "존재하지 않는 이메일, unknown@example.com, password",
     "비밀번호 불일치, user@example.com, wrong-password"
   })
-  @DisplayName("잘못된 인증 정보로 로그인하면 인증을 거부한다")
+  @DisplayName("인증 정보가 틀리면 로그인을 거부한다")
   void rejectsLoginWithInvalidCredentials(String description, String email, String password) {
-    assertThatExceptionOfType(BusinessException.class)
-        .isThrownBy(() -> authService.login(email, password))
-        .extracting(BusinessException::getErrorCode)
-        .isEqualTo(ErrorCode.INVALID_CREDENTIALS);
+    // when
+    Throwable thrown = catchThrowable(() -> authService.login(email, password));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
   }
 }

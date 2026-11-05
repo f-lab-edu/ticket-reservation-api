@@ -1,7 +1,7 @@
 package com.ticketing.reservation.auth.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.ticketing.reservation.auth.config.AuthProperties;
 import com.ticketing.reservation.auth.config.JwtConfig;
@@ -23,19 +23,23 @@ class AccessTokenProviderTest {
 
   private static final String SECRET = "unit-test-jwt-secret-key-32-bytes-or-more";
   private static final Duration VALIDITY = Duration.ofMinutes(30);
+  private static final Duration DEFAULT_CLOCK_SKEW = Duration.ofSeconds(60);
 
   private final AuthProperties properties = new AuthProperties(SECRET, VALIDITY);
   private final JwtConfig jwtConfig = new JwtConfig(properties);
   private final JwtDecoder jwtDecoder = jwtConfig.jwtDecoder();
 
   @Test
-  @DisplayName("발급한 토큰은 검증에 성공하고 회원 식별자와 권한을 담는다")
+  @DisplayName("발급한 토큰에 회원 식별자, 권한 및 만료 정보가 포함된다")
   void issuesTokenWithMemberIdAndRole() {
+    // given
     Instant now = Instant.now();
     String token = providerAt(now).issue(member(1L));
 
+    // when
     Jwt jwt = jwtDecoder.decode(token);
 
+    // then
     assertThat(jwt.getSubject()).isEqualTo("1");
     assertThat(jwt.getClaimAsString(AccessTokenProvider.ROLE_CLAIM)).isEqualTo("USER");
     assertThat(jwt.getHeaders()).containsEntry("alg", "HS256");
@@ -43,17 +47,23 @@ class AccessTokenProviderTest {
   }
 
   @Test
-  @DisplayName("만료된 토큰은 검증에 실패한다")
+  @DisplayName("만료된 토큰이면 검증에 실패한다")
   void rejectsExpiredToken() {
-    Instant issuedAt = Instant.now().minus(VALIDITY).minusSeconds(120);
+    // given
+    Instant issuedAt = Instant.now().minus(VALIDITY).minus(DEFAULT_CLOCK_SKEW).minusSeconds(1);
     String token = providerAt(issuedAt).issue(member(1L));
 
-    assertThatExceptionOfType(JwtException.class).isThrownBy(() -> jwtDecoder.decode(token));
+    // when
+    Throwable thrown = catchThrowable(() -> jwtDecoder.decode(token));
+
+    // then
+    assertThat(thrown).isInstanceOf(JwtException.class);
   }
 
   @Test
-  @DisplayName("다른 키로 서명된 토큰은 검증에 실패한다")
+  @DisplayName("다른 키로 서명된 토큰이면 검증에 실패한다")
   void rejectsTokenSignedWithDifferentKey() {
+    // given
     AuthProperties otherProperties =
         new AuthProperties("other-jwt-secret-key-also-32-bytes-or-more", VALIDITY);
     String token =
@@ -61,12 +71,17 @@ class AccessTokenProviderTest {
                 new JwtConfig(otherProperties).jwtEncoder(), otherProperties, Clock.systemUTC())
             .issue(member(1L));
 
-    assertThatExceptionOfType(JwtException.class).isThrownBy(() -> jwtDecoder.decode(token));
+    // when
+    Throwable thrown = catchThrowable(() -> jwtDecoder.decode(token));
+
+    // then
+    assertThat(thrown).isInstanceOf(JwtException.class);
   }
 
   @Test
-  @DisplayName("내용이 변조된 토큰은 검증에 실패한다")
+  @DisplayName("변조된 토큰이면 검증에 실패한다")
   void rejectsTamperedToken() {
+    // given
     String[] parts = providerAt(Instant.now()).issue(member(1L)).split("\\.");
     String forgedPayload =
         Base64.getUrlEncoder()
@@ -76,7 +91,11 @@ class AccessTokenProviderTest {
                     .getBytes(StandardCharsets.UTF_8));
     String forged = parts[0] + "." + forgedPayload + "." + parts[2];
 
-    assertThatExceptionOfType(JwtException.class).isThrownBy(() -> jwtDecoder.decode(forged));
+    // when
+    Throwable thrown = catchThrowable(() -> jwtDecoder.decode(forged));
+
+    // then
+    assertThat(thrown).isInstanceOf(JwtException.class);
   }
 
   private AccessTokenProvider providerAt(Instant now) {
