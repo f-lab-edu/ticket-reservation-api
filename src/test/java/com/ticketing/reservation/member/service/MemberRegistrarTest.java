@@ -1,7 +1,7 @@
 package com.ticketing.reservation.member.service;
 
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
@@ -38,13 +38,19 @@ class MemberRegistrarTest {
   @Test
   @DisplayName("이메일 유니크 제약을 위반하면 이메일 중복 예외로 변환한다")
   void translatesEmailUniqueViolationToDuplicateEmailException() {
+    // given
     given(memberRepository.saveAndFlush(any()))
         .willThrow(constraintViolation("member.uk_member_email"));
 
-    assertThatExceptionOfType(BusinessException.class)
-        .isThrownBy(() -> memberRegistrar.register("user@example.com", "{bcrypt}hash"))
-        .extracting(BusinessException::getErrorCode)
-        .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
+    // when
+    Throwable thrown =
+        catchThrowable(() -> memberRegistrar.register("user@example.com", "{bcrypt}hash"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_EMAIL));
   }
 
   @ParameterizedTest
@@ -52,11 +58,16 @@ class MemberRegistrarTest {
   @NullSource
   @ValueSource(strings = "member.uk_member_nickname")
   void propagatesNonEmailConstraintViolation(String constraintName) {
+    // given
     DataIntegrityViolationException violation = constraintViolation(constraintName);
     given(memberRepository.saveAndFlush(any())).willThrow(violation);
 
-    assertThatThrownBy(() -> memberRegistrar.register("user@example.com", "{bcrypt}hash"))
-        .isSameAs(violation);
+    // when
+    Throwable thrown =
+        catchThrowable(() -> memberRegistrar.register("user@example.com", "{bcrypt}hash"));
+
+    // then
+    assertThat(thrown).isSameAs(violation);
   }
 
   // JPA 저장 시 Spring이 Hibernate ConstraintViolationException을 감싸 던지는 형태를 재현한다.

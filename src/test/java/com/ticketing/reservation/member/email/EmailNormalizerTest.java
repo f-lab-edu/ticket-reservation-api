@@ -11,20 +11,28 @@ import org.junit.jupiter.params.provider.ValueSource;
 class EmailNormalizerTest {
 
   @ParameterizedTest
-  @DisplayName("앞뒤 공백을 제거하고 소문자로 변환한다")
+  @DisplayName("정규화하면 앞뒤 공백을 제거하고 소문자로 변환한다")
   @ValueSource(strings = {"user@example.com", "USER@EXAMPLE.COM", "  User@Example.Com\t"})
   void trimsAndLowercases(String email) {
-    assertThat(EmailNormalizer.normalize(email)).isEqualTo("user@example.com");
+    // when
+    String result = EmailNormalizer.normalize(email);
+
+    // then
+    assertThat(result).isEqualTo("user@example.com");
   }
 
   @Test
-  @DisplayName("서버 기본 로케일과 관계없이 소문자로 변환한다")
+  @DisplayName("서버 기본 로케일이 달라도 동일한 정규화 결과를 반환한다")
   void lowercasesRegardlessOfDefaultLocale() {
+    // given
     Locale original = Locale.getDefault();
+    Locale.setDefault(Locale.forLanguageTag("tr-TR"));
     try {
-      Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+      // when
+      String result = EmailNormalizer.normalize("ADMIN@EXAMPLE.COM");
 
-      assertThat(EmailNormalizer.normalize("ADMIN@EXAMPLE.COM")).isEqualTo("admin@example.com");
+      // then
+      assertThat(result).isEqualTo("admin@example.com");
     } finally {
       Locale.setDefault(original);
     }
