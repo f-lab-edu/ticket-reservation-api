@@ -16,7 +16,7 @@ class ValidEmailValidatorTest {
   private final ValidEmailValidator validator = new ValidEmailValidator();
 
   @ParameterizedTest
-  @DisplayName("형식이 올바른 이메일은 통과한다")
+  @DisplayName("형식이 올바른 이메일이면 통과한다")
   @ValueSource(
       strings = {
         "user@example.com",
@@ -29,18 +29,26 @@ class ValidEmailValidatorTest {
         "\tuser@example.com\n"
       })
   void acceptsValidEmail(String email) {
-    assertThat(validator.isValid(email, null)).isTrue();
+    // when
+    boolean result = validator.isValid(email, null);
+
+    // then
+    assertThat(result).isTrue();
   }
 
   // 필수 여부는 @NotBlank가 검증한다.
   @Test
-  @DisplayName("null은 통과시킨다")
+  @DisplayName("null이면 통과한다")
   void acceptsNullEmail() {
-    assertThat(validator.isValid(null, null)).isTrue();
+    // when
+    boolean result = validator.isValid(null, null);
+
+    // then
+    assertThat(result).isTrue();
   }
 
   @ParameterizedTest
-  @DisplayName("형식이 올바르지 않은 이메일은 실패한다")
+  @DisplayName("형식이 올바르지 않은 이메일이면 실패한다")
   @ValueSource(
       strings = {
         "",
@@ -73,14 +81,22 @@ class ValidEmailValidatorTest {
         "user@example.-com"
       })
   void rejectsInvalidEmail(String email) {
-    assertThat(validator.isValid(email, null)).isFalse();
+    // when
+    boolean result = validator.isValid(email, null);
+
+    // then
+    assertThat(result).isFalse();
   }
 
   @ParameterizedTest
-  @DisplayName("길이 제한의 경계값을 검증한다")
+  @DisplayName("길이가 제한 이내면 통과하고 제한을 넘으면 실패한다")
   @MethodSource("lengthBoundaries")
   void validatesEmailLengthBoundaries(String email, boolean expected) {
-    assertThat(validator.isValid(email, null)).isEqualTo(expected);
+    // when
+    boolean result = validator.isValid(email, null);
+
+    // then
+    assertThat(result).isEqualTo(expected);
   }
 
   static Stream<Arguments> lengthBoundaries() {
