@@ -40,6 +40,7 @@
 | `DUPLICATE_EMAIL` | 409 | 이미 사용 중인 이메일입니다. |
 | `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호가 올바르지 않습니다. |
 | `UNAUTHORIZED` | 401 | 인증 정보가 없거나 유효하지 않습니다. |
+| `AUTH_STORE_UNAVAILABLE` | 503 | 인증 서비스를 일시적으로 사용할 수 없습니다. |
 
 ### 1.3. 인증
 
@@ -155,12 +156,14 @@ Authorization: Bearer {accessToken}
 | `tokenType` | string | 항상 `Bearer` |
 | `accessToken` | string | 액세스 토큰 (JWT). 회원 식별자(`sub`)와 권한(`role`)을 포함 |
 | `expiresIn` | number | 액세스 토큰 유효 시간(초), `1800` |
+| `refreshToken` | string | 리프레시 토큰 (불투명 난수 문자열, 유효기간 7일) |
 
 ```json
 {
   "tokenType": "Bearer",
   "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
-  "expiresIn": 1800
+  "expiresIn": 1800,
+  "refreshToken": "q3Jx0b2m..."
 }
 ```
 
@@ -170,3 +173,4 @@ Authorization: Bearer {accessToken}
 |---|---|--------------------------------------------------------|
 | - | 400 | `email`이 없거나 비어 있음<br>`password`가 없거나 비어 있거나 72바이트를 초과함 |
 | `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호가 올바르지 않음 |
+| `AUTH_STORE_UNAVAILABLE` | 503 | 토큰 저장소 장애 |
