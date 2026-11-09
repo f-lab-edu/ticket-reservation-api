@@ -32,21 +32,46 @@ public class RefreshTokenRepository {
       local now = time[1] * 1000 + math.floor(time[2] / 1000)
       """;
 
+  private static final String SAVE_ACTIVE_TOKEN =
+      """
+      local function saveActiveToken(key, memberId, familyId, now, validityMillis, retentionMillis)
+        local expiresAt = now + tonumber(validityMillis)
+        redis.call('HSET', key,
+          'memberId', memberId,
+          'familyId', familyId,
+          'status', 'ACTIVE',
+          'createdAt', string.format('%.0f', now),
+          'expiresAt', string.format('%.0f', expiresAt))
+        redis.call('PEXPIREAT', key, string.format('%.0f', expiresAt + tonumber(retentionMillis)))
+      end
+      """;
+
   private static final RedisScript<Long> SAVE =
-      RedisScript.of(
-          CURRENT_TIME_MILLIS
-              + """
-              local expiresAt = now + tonumber(ARGV[3])
-              redis.call('HSET', KEYS[1],
-                'memberId', ARGV[1],
-                'familyId', ARGV[2],
-                'status', 'ACTIVE',
-                'createdAt', string.format('%.0f', now),
-                'expiresAt', string.format('%.0f', expiresAt))
-              redis.call('PEXPIREAT', KEYS[1], string.format('%.0f', expiresAt + tonumber(ARGV[4])))
-              return 1
-              """,
-          Long.class);
+      script(
+          """
+          saveActiveToken(KEYS[1], ARGV[1], ARGV[2], now, ARGV[3], ARGV[4])
+          return 1
+          """);
+
+  private static final RedisScript<Long> ROTATE =
+      script(
+          """
+          if redis.call('HGET', KEYS[1], 'status') ~= 'ACTIVE' then
+            return 0
+          end
+          if tonumber(redis.call('HGET', KEYS[1], 'expiresAt')) <= now then
+            return 0
+          end
+          redis.call('HSET', KEYS[1], 'status', 'USED')
+          saveActiveToken(
+            KEYS[2],
+            redis.call('HGET', KEYS[1], 'memberId'),
+            redis.call('HGET', KEYS[1], 'familyId'),
+            now,
+            ARGV[1],
+            ARGV[2])
+          return 1
+          """);
 
   private final StringRedisTemplate redisTemplate;
   private final long validityMillis;
@@ -77,6 +102,22 @@ public class RefreshTokenRepository {
       return Optional.empty();
     }
     return Optional.of(toToken(tokenHash, fields));
+  }
+
+  public boolean rotate(String currentHash, String newHash) {
+    Long rotated =
+        execute(
+            () ->
+                redisTemplate.execute(
+                    ROTATE,
+                    List.of(key(currentHash), key(newHash)),
+                    String.valueOf(validityMillis),
+                    String.valueOf(retentionMillis)));
+    return Long.valueOf(1L).equals(rotated);
+  }
+
+  private static RedisScript<Long> script(String body) {
+    return RedisScript.of(CURRENT_TIME_MILLIS + SAVE_ACTIVE_TOKEN + body, Long.class);
   }
 
   private static RefreshToken toToken(String tokenHash, Map<Object, Object> fields) {

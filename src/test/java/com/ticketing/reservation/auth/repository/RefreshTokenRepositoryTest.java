@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.ticketing.reservation.TestcontainersConfiguration;
 import com.ticketing.reservation.auth.config.RefreshTokenProperties;
 import com.ticketing.reservation.auth.domain.RefreshToken;
+import com.ticketing.reservation.auth.domain.RefreshTokenStatus;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.AfterAll;
@@ -69,10 +70,32 @@ class RefreshTokenRepositoryTest {
 
     // then
     RefreshToken token = repository.findByTokenHash("hash").orElseThrow();
-    assertThat(expireTimeMillis()).isEqualTo(token.expiresAt().plus(RETENTION).toEpochMilli());
+    assertThat(expireTimeMillis("hash"))
+        .isEqualTo(token.expiresAt().plus(RETENTION).toEpochMilli());
   }
 
-  private static long expireTimeMillis() {
-    return redisTemplate.execute(PEXPIRETIME, List.of(KEY_PREFIX + "hash"));
+  @Test
+  @DisplayName("ACTIVE 토큰을 교체하면 USED로 바꾸고 같은 회원과 패밀리로 새 토큰을 저장한다")
+  void rotatesActiveToken() {
+    // given
+    repository.save("old", MEMBER_ID, FAMILY);
+
+    // when
+    boolean rotated = repository.rotate("old", "new");
+    RefreshToken usedToken = repository.findByTokenHash("old").orElseThrow();
+    RefreshToken newToken = repository.findByTokenHash("new").orElseThrow();
+
+    // then
+    assertThat(rotated).isTrue();
+    assertThat(usedToken.status()).isEqualTo(RefreshTokenStatus.USED);
+
+    assertThat(newToken.memberId()).isEqualTo(MEMBER_ID);
+    assertThat(newToken.familyId()).isEqualTo(FAMILY);
+    assertThat(newToken.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
+    assertThat(newToken.expiresAt()).isEqualTo(newToken.createdAt().plus(VALIDITY));
+  }
+
+  private static long expireTimeMillis(String tokenHash) {
+    return redisTemplate.execute(PEXPIRETIME, List.of(KEY_PREFIX + tokenHash));
   }
 }

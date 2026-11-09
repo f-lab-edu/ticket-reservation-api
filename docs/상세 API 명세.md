@@ -40,11 +40,12 @@
 | `DUPLICATE_EMAIL` | 409 | 이미 사용 중인 이메일입니다. |
 | `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호가 올바르지 않습니다. |
 | `UNAUTHORIZED` | 401 | 인증 정보가 없거나 유효하지 않습니다. |
+| `INVALID_REFRESH_TOKEN` | 401 | 리프레시 토큰이 유효하지 않습니다. |
 | `AUTH_STORE_UNAVAILABLE` | 503 | 인증 서비스를 일시적으로 사용할 수 없습니다. |
 
 ### 1.3. 인증
 
-인증이 필요한 API는 로그인으로 받은 액세스 토큰을 `Authorization` 헤더에 담아 호출합니다.
+인증이 필요한 API는 로그인 또는 토큰 재발급(3.2)으로 받은 액세스 토큰을 `Authorization` 헤더에 담아 호출합니다. 액세스 토큰이 만료되면 토큰 재발급으로 새 토큰을 받습니다.
 
 ```
 Authorization: Bearer {accessToken}
@@ -173,4 +174,30 @@ Authorization: Bearer {accessToken}
 |---|---|--------------------------------------------------------|
 | - | 400 | `email`이 없거나 비어 있음<br>`password`가 없거나 비어 있거나 72바이트를 초과함 |
 | `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호가 올바르지 않음 |
+| `AUTH_STORE_UNAVAILABLE` | 503 | 토큰 저장소 장애 |
+
+### 3.2. 토큰 재발급
+
+`POST /api/v1/auth/refresh` · 인증 불필요 · 기능정의서 4.3.2
+
+#### 요청
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `refreshToken` | string | O | 로그인 또는 이전 재발급에서 받은 리프레시 토큰 |
+
+```json
+{ "refreshToken": "q3Jx0b2m..." }
+```
+
+#### 응답: `200 OK`
+
+로그인 응답(3.1)과 같습니다.
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | `refreshToken`이 없거나 비어 있음 |
+| `INVALID_REFRESH_TOKEN` | 401 | 리프레시 토큰이 존재하지 않거나, 만료됐거나, 이미 사용됨 |
 | `AUTH_STORE_UNAVAILABLE` | 503 | 토큰 저장소 장애 |
