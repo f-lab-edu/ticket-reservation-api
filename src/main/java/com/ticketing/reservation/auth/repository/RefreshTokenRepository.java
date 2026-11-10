@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -17,6 +19,8 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class RefreshTokenRepository {
+
+  private static final Logger log = LoggerFactory.getLogger(RefreshTokenRepository.class);
 
   private static final String KEY_PREFIX = "auth:refresh-token:";
 
@@ -101,6 +105,7 @@ public class RefreshTokenRepository {
     try {
       return command.get();
     } catch (DataAccessException e) {
+      log.error("Failed to execute Redis command", e);
       throw new BusinessException(ErrorCode.AUTH_STORE_UNAVAILABLE, e);
     }
   }
