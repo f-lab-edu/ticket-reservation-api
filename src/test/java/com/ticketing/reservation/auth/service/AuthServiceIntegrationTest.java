@@ -5,8 +5,13 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.ticketing.reservation.TestcontainersConfiguration;
 import com.ticketing.reservation.auth.config.AuthProperties;
+import com.ticketing.reservation.auth.config.RefreshTokenProperties;
+import com.ticketing.reservation.auth.domain.RefreshToken;
+import com.ticketing.reservation.auth.domain.RefreshTokenStatus;
 import com.ticketing.reservation.auth.dto.TokenResponse;
+import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
 import com.ticketing.reservation.auth.token.AccessTokenProvider;
+import com.ticketing.reservation.auth.token.RefreshTokenProvider;
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.member.domain.Member;
@@ -21,6 +26,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 
@@ -36,6 +42,10 @@ class AuthServiceIntegrationTest {
   @Autowired private MemberRepository memberRepository;
   @Autowired private JwtDecoder jwtDecoder;
   @Autowired private AuthProperties properties;
+  @Autowired private RefreshTokenProperties refreshTokenProperties;
+  @Autowired private RefreshTokenProvider refreshTokenProvider;
+  @Autowired private RefreshTokenRepository refreshTokenRepository;
+  @Autowired private StringRedisTemplate redisTemplate;
 
   private Member member;
 
@@ -50,8 +60,8 @@ class AuthServiceIntegrationTest {
   }
 
   @Test
-  @DisplayName("인증 정보가 맞으면 액세스 토큰을 발급한다")
-  void issuesAccessTokenWhenCredentialsAreValid() {
+  @DisplayName("인증 정보가 맞으면 토큰을 발급하고 리프레시 토큰은 해시값으로 저장한다")
+  void issuesTokensWhenCredentialsAreValid() {
     // given
     String email = " User@Example.com ";
 
@@ -64,6 +74,28 @@ class AuthServiceIntegrationTest {
     assertThat(jwt.getClaimAsString(AccessTokenProvider.ROLE_CLAIM)).isEqualTo("USER");
     assertThat(tokens.tokenType()).isEqualTo("Bearer");
     assertThat(tokens.expiresIn()).isEqualTo(properties.accessTokenValidity().toSeconds());
+    assertThat(tokens.refreshToken()).isNotBlank();
+    assertThat(stored(tokens.refreshToken()))
+        .satisfies(
+            token -> {
+              assertThat(token.memberId()).isEqualTo(member.getId());
+              assertThat(token.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
+              assertThat(token.expiresAt())
+                  .isEqualTo(token.createdAt().plus(refreshTokenProperties.validity()));
+            });
+    assertThat(redisTemplate.hasKey("auth:refresh-token:" + tokens.refreshToken())).isFalse();
+  }
+
+  @Test
+  @DisplayName("로그인할 때마다 새로운 Token Family로 발급한다")
+  void issuesDifferentTokenFamiliesForEachLogin() {
+    // when
+    TokenResponse first = authService.login(EMAIL, PASSWORD);
+    TokenResponse second = authService.login(EMAIL, PASSWORD);
+
+    // then
+    assertThat(stored(first.refreshToken()).familyId())
+        .isNotEqualTo(stored(second.refreshToken()).familyId());
   }
 
   @ParameterizedTest(name = "{0}")
@@ -81,5 +113,11 @@ class AuthServiceIntegrationTest {
         .isInstanceOfSatisfying(
             BusinessException.class,
             e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+  }
+
+  private RefreshToken stored(String rawToken) {
+    return refreshTokenRepository
+        .findByTokenHash(refreshTokenProvider.hash(rawToken))
+        .orElseThrow();
   }
 }

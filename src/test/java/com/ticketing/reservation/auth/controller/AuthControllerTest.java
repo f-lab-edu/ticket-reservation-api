@@ -28,7 +28,8 @@ import org.springframework.test.web.servlet.ResultActions;
 @Import({SecurityConfig.class, JwtConfig.class})
 class AuthControllerTest {
 
-  private static final TokenResponse TOKENS = TokenResponse.bearer("access-token", 1800);
+  private static final TokenResponse TOKENS =
+      TokenResponse.bearer("access-token", 1800, "refresh-token");
 
   @Autowired private MockMvc mockMvc;
 
@@ -55,7 +56,8 @@ class AuthControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.tokenType").value("Bearer"))
         .andExpect(jsonPath("$.accessToken").value("access-token"))
-        .andExpect(jsonPath("$.expiresIn").value(1800));
+        .andExpect(jsonPath("$.expiresIn").value(1800))
+        .andExpect(jsonPath("$.refreshToken").value("refresh-token"));
   }
 
   @Test

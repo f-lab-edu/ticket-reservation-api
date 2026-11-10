@@ -13,7 +13,7 @@
 |---|---|---|---|---|---|---|
 | 1 | 이메일 중복 확인 | GET | `/members/email-availability` | Query: 이메일 | 사용 가능 여부 (이메일 형식이 유효하지 않으면 잘못된 요청 오류) | 불필요 |
 | 1 | 회원가입 | POST | `/members` | Body: 이메일, 비밀번호 | 생성된 회원 정보 | 불필요 |
-| 1 | 로그인 | POST | `/auth/login` | Body: 이메일, 비밀번호 | 인증 토큰 및 만료 정보 | 불필요 |
+| 1 | 로그인 | POST | `/auth/login` | Body: 이메일, 비밀번호 | 액세스·리프레시 토큰 및 만료 정보 | 불필요 |
 | 2 | 공연 등록 | POST | `/performances` | Body: 공연명, 공연 일시, 판매 기간, 판매 수량, 가격 등 | 생성된 공연 정보 | 관리자 |
 | 2 | 공연 목록 조회 | GET | `/performances` | Query: `available` (선택) | 공연 목록(공연명, 공연 일시, 판매 기간, 가격, 잔여 수량 등) | 불필요 |
 | 2 | 공연 상세 조회 | GET | `/performances/{performanceId}` | Path: 공연 식별자 | 공연 상세 정보 | 불필요 |

@@ -13,6 +13,8 @@ Java와 Spring Boot 기반의 티켓 예매 API 서버 프로젝트입니다.
 
 ## 전체적인 구조
 
+아래는 목표 구조입니다. 현재 `compose.yaml`은 MySQL과 Redis만 실행합니다.
+
 ```mermaid
 flowchart LR
     Client([Client / Load Tester])
@@ -26,23 +28,24 @@ flowchart LR
         end
 
         MySQL[(MySQL<br/>회원,공연,예약)]
-        Redis[(Redis<br/>분산 락)]
+        Redis[(Redis)]
     end
 
     Client --> Nginx
     Nginx --> App1
     Nginx --> App2
     Apps <--> MySQL
-    Apps -.->|검토 후 적용| Redis
+    Apps <-->|토큰 저장| Redis
+    Apps -.->|분산 락 검토| Redis
 ```
 
 ### 구성 요소
 
 - **Spring Boot:** 회원, 공연, 예약 API 및 애플리케이션 내부의 Mock 결제 처리를 담당합니다.
 - **MySQL:** 회원, 공연, 예약 데이터를 저장합니다.
-- **Redis:** 분산 락을 통한 동시성 제어에 사용하며, DB 기반 방식과 성능을 비교합니다.
+- **Redis:** 리프레시 토큰을 저장합니다. 분산 락을 통한 동시성 제어에도 사용할 수 있는지 검토하고 DB 기반 방식과 성능을 비교합니다.
 - **Nginx:** 다중 인스턴스 환경에서 요청을 분산합니다.
-- **Docker Compose:** 로컬에서 Spring Boot 다중 인스턴스와 MySQL, Redis, Nginx를 함께 실행할 수 있도록 환경을 구성합니다.
+- **Docker Compose:** 로컬에서 MySQL과 Redis를 실행합니다. 이후 Spring Boot 다중 인스턴스와 Nginx까지 함께 실행하도록 확장합니다.
 
 ## 주요 기능
 
@@ -69,10 +72,10 @@ API Base path: `/api/v1`
 Docker가 실행 중인 상태에서 아래 명령을 실행합니다. (Windows는 `gradlew.bat`)
 
 ```bash
-# 애플리케이션 실행 (MySQL 컨테이너 자동 실행)
+# 애플리케이션 실행 (MySQL·Redis 컨테이너 자동 실행)
 ./gradlew bootRun
 
-# 테스트 실행 (테스트용 MySQL 컨테이너 자동 실행)
+# 테스트 실행 (테스트용 MySQL·Redis 컨테이너 자동 실행)
 ./gradlew test
 ```
 
