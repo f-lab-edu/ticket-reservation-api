@@ -6,9 +6,11 @@ import com.ticketing.reservation.auth.config.RefreshTokenProperties;
 import com.ticketing.reservation.auth.domain.RefreshToken;
 import com.ticketing.reservation.auth.domain.RefreshTokenStatus;
 import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
+import com.ticketing.reservation.auth.repository.RotationResult;
 import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +29,7 @@ class RefreshTokenRepositoryTest {
   private static final String FAMILY = "family";
   private static final Long MEMBER_ID = 1L;
   private static final String KEY_PREFIX = "auth:refresh-token:";
+  private static final String FAMILY_KEY_PREFIX = "auth:refresh-token-family:";
 
   private static final RedisScript<Long> PEXPIRETIME =
       RedisScript.of("return redis.call('PEXPIRETIME', KEYS[1])", Long.class);
@@ -64,7 +67,7 @@ class RefreshTokenRepositoryTest {
   }
 
   @Test
-  @DisplayName("저장하면 만료 시각에 보존 기간을 더한 시점에 삭제되도록 설정한다")
+  @DisplayName("리프레시 토큰을 저장하면 만료 시각에 보존 기간을 더한 시점에 삭제되도록 설정한다")
   void setsKeyExpiryToExpiresAtPlusRetention() {
     // when
     repository.save("hash", MEMBER_ID, FAMILY);
@@ -76,24 +79,61 @@ class RefreshTokenRepositoryTest {
   }
 
   @Test
-  @DisplayName("ACTIVE 토큰을 교체하면 USED로 바꾸고 같은 회원과 패밀리로 새 토큰을 저장한다")
+  @DisplayName("재발급 시 ACTIVE 토큰이면 USED로 변경하고 같은 회원과 로그인 세션의 새 토큰을 저장한다")
   void rotatesActiveToken() {
     // given
     repository.save("old", MEMBER_ID, FAMILY);
 
     // when
-    boolean rotated = repository.rotate("old", "new");
+    RotationResult result = repository.rotate("old", "new", FAMILY);
     RefreshToken usedToken = repository.findByTokenHash("old").orElseThrow();
     RefreshToken newToken = repository.findByTokenHash("new").orElseThrow();
 
     // then
-    assertThat(rotated).isTrue();
+    assertThat(result).isEqualTo(RotationResult.ROTATED);
     assertThat(usedToken.status()).isEqualTo(RefreshTokenStatus.USED);
 
     assertThat(newToken.memberId()).isEqualTo(MEMBER_ID);
     assertThat(newToken.familyId()).isEqualTo(FAMILY);
     assertThat(newToken.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
     assertThat(newToken.expiresAt()).isEqualTo(newToken.createdAt().plus(VALIDITY));
+  }
+
+  @Test
+  @DisplayName("재발급 시 USED 토큰이면 재사용으로 판단하고 해당 로그인 세션을 무효화한다")
+  void revokesFamilyWhenUsedTokenIsRotated() {
+    // given
+    repository.save("old", MEMBER_ID, FAMILY);
+    repository.rotate("old", "new", FAMILY);
+
+    // when
+    RotationResult reused = repository.rotate("old", "reused", FAMILY);
+    RotationResult afterRevoke = repository.rotate("new", "revoked", FAMILY);
+
+    // then
+    assertThat(reused).isEqualTo(RotationResult.REUSED);
+    assertThat(afterRevoke).isEqualTo(RotationResult.REJECTED);
+    assertThat(repository.findByTokenHash("reused")).isEmpty();
+    assertThat(repository.findByTokenHash("revoked")).isEmpty();
+    assertThat(redisTemplate.getExpire(FAMILY_KEY_PREFIX + FAMILY, TimeUnit.MILLISECONDS))
+        .isBetween(VALIDITY.minusMinutes(1).toMillis(), VALIDITY.toMillis());
+  }
+
+  @Test
+  @DisplayName("재발급 시 만료된 USED 토큰이어도 재사용으로 판단하고 해당 로그인 세션을 무효화한다")
+  void revokesFamilyWhenExpiredUsedTokenIsRotated() {
+    // given
+    repository.save("old", MEMBER_ID, FAMILY);
+    repository.rotate("old", "new", FAMILY);
+    redisTemplate.opsForHash().put(KEY_PREFIX + "old", "expiresAt", "1");
+
+    // when
+    RotationResult reused = repository.rotate("old", "reused", FAMILY);
+    RotationResult afterRevoke = repository.rotate("new", "revoked", FAMILY);
+
+    // then
+    assertThat(reused).isEqualTo(RotationResult.REUSED);
+    assertThat(afterRevoke).isEqualTo(RotationResult.REJECTED);
   }
 
   private static long expireTimeMillis(String tokenHash) {

@@ -20,6 +20,7 @@ import com.ticketing.reservation.member.repository.MemberRepository;
 import com.ticketing.reservation.member.service.MemberService;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -184,38 +185,61 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("이미 사용한 리프레시 토큰이면 재발급을 거부한다")
-    void rejectsUsedToken() {
+    @DisplayName("이미 사용한 리프레시 토큰이면 재발급을 거부하고 같은 로그인 세션의 토큰을 모두 무효화한다")
+    void rejectsUsedTokenAndRevokesFamily() {
       // given
-      TokenResponse login = authService.login(EMAIL, PASSWORD);
-      authService.refresh(login.refreshToken());
+      String initialToken = authService.login(EMAIL, PASSWORD).refreshToken();
+      String rotatedToken = authService.refresh(initialToken).refreshToken();
 
       // when
-      Throwable thrown = catchThrowable(() -> authService.refresh(login.refreshToken()));
+      Throwable reusedTokenThrown = catchThrowable(() -> authService.refresh(initialToken));
+      Throwable revokedTokenThrown = catchThrowable(() -> authService.refresh(rotatedToken));
 
       // then
-      assertThat(thrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
+      assertThat(reusedTokenThrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
+      assertThat(revokedTokenThrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
     }
 
     @Test
-    @DisplayName("같은 리프레시 토큰으로 동시에 요청하면 한 요청만 성공한다")
-    void allowsOnlyOneConcurrentRefresh() throws Exception {
+    @DisplayName("재사용이 감지돼도 다른 로그인 세션의 토큰은 재발급할 수 있다")
+    void keepsOtherLoginsWhenReuseIsDetected() {
       // given
-      TokenResponse login = authService.login(EMAIL, PASSWORD);
+      String deviceAToken = authService.login(EMAIL, PASSWORD).refreshToken();
+      String deviceBToken = authService.login(EMAIL, PASSWORD).refreshToken();
+      authService.refresh(deviceAToken);
 
       // when
-      List<Boolean> results = runConcurrently(10, () -> refreshSucceeds(login.refreshToken()));
+      Throwable deviceAReusedThrown = catchThrowable(() -> authService.refresh(deviceAToken));
+      TokenResponse deviceBResponse = authService.refresh(deviceBToken);
 
       // then
-      assertThat(results).containsOnlyOnce(true);
+      assertThat(deviceAReusedThrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
+      assertThat(deviceBResponse.refreshToken()).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("같은 리프레시 토큰으로 동시에 요청하면 재사용으로 판단해 성공한 요청이 받은 토큰까지 무효화한다")
+    void revokesFamilyOnConcurrentRefresh() throws Exception {
+      // given
+      String initialToken = authService.login(EMAIL, PASSWORD).refreshToken();
+
+      // when
+      List<TokenResponse> responses = runConcurrently(10, () -> refreshOrNull(initialToken));
+
+      // then
+      List<TokenResponse> successResponses = responses.stream().filter(Objects::nonNull).toList();
+      assertThat(successResponses).hasSize(1);
+
+      String rotatedToken = successResponses.getFirst().refreshToken();
+      Throwable revokedTokenThrown = catchThrowable(() -> authService.refresh(rotatedToken));
+      assertThat(revokedTokenThrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
     }
   }
 
-  private static List<Boolean> runConcurrently(int threadCount, Callable<Boolean> task)
-      throws Exception {
+  private static <T> List<T> runConcurrently(int threadCount, Callable<T> task) throws Exception {
     CountDownLatch ready = new CountDownLatch(threadCount);
     CountDownLatch start = new CountDownLatch(1);
-    List<Future<Boolean>> futures = new ArrayList<>();
+    List<Future<T>> futures = new ArrayList<>();
 
     try (ExecutorService executor = Executors.newFixedThreadPool(threadCount)) {
       for (int i = 0; i < threadCount; i++) {
@@ -231,22 +255,21 @@ class AuthServiceTest {
       start.countDown();
     }
 
-    List<Boolean> results = new ArrayList<>();
-    for (Future<Boolean> future : futures) {
+    List<T> results = new ArrayList<>();
+    for (Future<T> future : futures) {
       results.add(future.get());
     }
     return results;
   }
 
-  private boolean refreshSucceeds(String refreshToken) {
+  private TokenResponse refreshOrNull(String refreshToken) {
     try {
-      authService.refresh(refreshToken);
-      return true;
+      return authService.refresh(refreshToken);
     } catch (BusinessException e) {
       if (e.getErrorCode() != ErrorCode.INVALID_REFRESH_TOKEN) {
         throw e;
       }
-      return false;
+      return null;
     }
   }
 
