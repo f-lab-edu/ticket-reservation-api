@@ -1,11 +1,12 @@
-package com.ticketing.reservation.auth.repository;
+package com.ticketing.reservation.integration.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.ticketing.reservation.TestcontainersConfiguration;
 import com.ticketing.reservation.auth.config.RefreshTokenProperties;
 import com.ticketing.reservation.auth.domain.RefreshToken;
 import com.ticketing.reservation.auth.domain.RefreshTokenStatus;
+import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
+import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.AfterAll;

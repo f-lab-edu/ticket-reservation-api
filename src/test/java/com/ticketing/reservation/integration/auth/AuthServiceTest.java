@@ -1,19 +1,20 @@
-package com.ticketing.reservation.auth.service;
+package com.ticketing.reservation.integration.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
-import com.ticketing.reservation.TestcontainersConfiguration;
 import com.ticketing.reservation.auth.config.AuthProperties;
 import com.ticketing.reservation.auth.config.RefreshTokenProperties;
 import com.ticketing.reservation.auth.domain.RefreshToken;
 import com.ticketing.reservation.auth.domain.RefreshTokenStatus;
 import com.ticketing.reservation.auth.dto.TokenResponse;
 import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
+import com.ticketing.reservation.auth.service.AuthService;
 import com.ticketing.reservation.auth.token.AccessTokenProvider;
 import com.ticketing.reservation.auth.token.RefreshTokenProvider;
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
+import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.repository.MemberRepository;
 import com.ticketing.reservation.member.service.MemberService;
@@ -41,7 +42,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
-class AuthServiceIntegrationTest {
+class AuthServiceTest {
 
   private static final String EMAIL = "user@example.com";
   private static final String PASSWORD = "password";
