@@ -1,4 +1,4 @@
-package com.ticketing.reservation.auth.service;
+package com.ticketing.reservation.integration.auth;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;

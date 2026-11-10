@@ -1,14 +1,15 @@
-package com.ticketing.reservation.member.service;
+package com.ticketing.reservation.integration.member;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
-import com.ticketing.reservation.TestcontainersConfiguration;
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
+import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.domain.MemberRole;
 import com.ticketing.reservation.member.repository.MemberRepository;
+import com.ticketing.reservation.member.service.MemberService;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -25,7 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
-class MemberServiceIntegrationTest {
+class MemberServiceTest {
 
   @Autowired private MemberService memberService;
   @Autowired private MemberRepository memberRepository;

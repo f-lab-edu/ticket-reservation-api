@@ -1,5 +1,6 @@
 package com.ticketing.reservation.auth.service;
 
+import com.ticketing.reservation.auth.domain.RefreshToken;
 import com.ticketing.reservation.auth.dto.TokenResponse;
 import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
 import com.ticketing.reservation.auth.token.AccessTokenProvider;
@@ -46,6 +47,31 @@ public class AuthService {
     refreshTokenRepository.save(
         refreshTokenProvider.hash(refreshToken), member.getId(), UUID.randomUUID().toString());
 
+    return tokenResponse(member, refreshToken);
+  }
+
+  public TokenResponse refresh(String refreshToken) {
+    String currentHash = refreshTokenProvider.hash(refreshToken);
+    RefreshToken current =
+        refreshTokenRepository
+            .findByTokenHash(currentHash)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
+
+    Member member =
+        memberRepository
+            .findById(current.memberId())
+            .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
+
+    String newRefreshToken = refreshTokenProvider.generate();
+    TokenResponse response = tokenResponse(member, newRefreshToken);
+
+    if (!refreshTokenRepository.rotate(currentHash, refreshTokenProvider.hash(newRefreshToken))) {
+      throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+    return response;
+  }
+
+  private TokenResponse tokenResponse(Member member, String refreshToken) {
     return TokenResponse.bearer(
         accessTokenProvider.issue(member), accessTokenProvider.validitySeconds(), refreshToken);
   }

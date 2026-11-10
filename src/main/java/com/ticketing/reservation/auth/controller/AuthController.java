@@ -1,6 +1,7 @@
 package com.ticketing.reservation.auth.controller;
 
 import com.ticketing.reservation.auth.dto.LoginRequest;
+import com.ticketing.reservation.auth.dto.RefreshTokenRequest;
 import com.ticketing.reservation.auth.dto.TokenResponse;
 import com.ticketing.reservation.auth.service.AuthService;
 import jakarta.validation.Valid;
@@ -22,5 +23,10 @@ public class AuthController {
   @PostMapping("/login")
   public TokenResponse login(@Valid @RequestBody LoginRequest request) {
     return authService.login(request.email(), request.password());
+  }
+
+  @PostMapping("/refresh")
+  public TokenResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
+    return authService.refresh(request.refreshToken());
   }
 }

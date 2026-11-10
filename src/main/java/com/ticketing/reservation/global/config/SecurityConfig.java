@@ -34,7 +34,8 @@ public class SecurityConfig {
       new OrRequestMatcher(
           PATH.matcher(HttpMethod.GET, "/api/v1/members/email-availability"),
           PATH.matcher(HttpMethod.POST, "/api/v1/members"),
-          PATH.matcher(HttpMethod.POST, "/api/v1/auth/login"));
+          PATH.matcher(HttpMethod.POST, "/api/v1/auth/login"),
+          PATH.matcher(HttpMethod.POST, "/api/v1/auth/refresh"));
 
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper)
