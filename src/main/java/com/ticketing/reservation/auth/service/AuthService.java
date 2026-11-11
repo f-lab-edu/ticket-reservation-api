@@ -48,11 +48,11 @@ public class AuthService {
             .filter(found -> passwordEncoder.matches(rawPassword, found.getPassword()))
             .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
 
+    String familyId = UUID.randomUUID().toString();
     String refreshToken = refreshTokenProvider.generate();
-    refreshTokenRepository.save(
-        refreshTokenProvider.hash(refreshToken), member.getId(), UUID.randomUUID().toString());
+    refreshTokenRepository.save(refreshTokenProvider.hash(refreshToken), member.getId(), familyId);
 
-    return tokenResponse(member, refreshToken);
+    return tokenResponse(member, familyId, refreshToken);
   }
 
   public TokenResponse refresh(String refreshToken) {
@@ -68,7 +68,7 @@ public class AuthService {
             .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
 
     String newRefreshToken = refreshTokenProvider.generate();
-    TokenResponse response = tokenResponse(member, newRefreshToken);
+    TokenResponse response = tokenResponse(member, current.familyId(), newRefreshToken);
 
     RotationResult result =
         refreshTokenRepository.rotate(
@@ -85,8 +85,14 @@ public class AuthService {
     return response;
   }
 
-  private TokenResponse tokenResponse(Member member, String refreshToken) {
+  public void logout(String familyId) {
+    refreshTokenRepository.revokeFamily(familyId);
+  }
+
+  private TokenResponse tokenResponse(Member member, String familyId, String refreshToken) {
     return TokenResponse.bearer(
-        accessTokenProvider.issue(member), accessTokenProvider.validitySeconds(), refreshToken);
+        accessTokenProvider.issue(member, familyId),
+        accessTokenProvider.validitySeconds(),
+        refreshToken);
   }
 }

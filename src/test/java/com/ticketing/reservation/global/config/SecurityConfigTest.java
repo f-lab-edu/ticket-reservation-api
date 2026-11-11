@@ -1,5 +1,6 @@
 package com.ticketing.reservation.global.config;
 
+import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -8,7 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ticketing.reservation.auth.config.AuthProperties;
 import com.ticketing.reservation.auth.config.JwtConfig;
+import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
 import com.ticketing.reservation.auth.token.AccessTokenProvider;
+import com.ticketing.reservation.global.error.BusinessException;
+import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.member.domain.Member;
 import java.time.Clock;
 import java.time.Duration;
@@ -25,7 +29,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -41,16 +50,19 @@ class SecurityConfigTest {
   private static final String PROTECTED_PATH = "/test/protected";
   private static final String PUBLIC_PATH = "/api/v1/auth/login";
   private static final Duration DEFAULT_CLOCK_SKEW = Duration.ofSeconds(60);
+  private static final String FAMILY_ID = "family";
 
   @Autowired private MockMvc mockMvc;
   @Autowired private JwtEncoder jwtEncoder;
   @Autowired private AuthProperties properties;
 
+  @MockitoBean private RefreshTokenRepository refreshTokenRepository;
+
   @Test
   @DisplayName("유효한 토큰이면 회원 식별자와 권한으로 인증된다")
   void authenticatesWithValidAccessToken() throws Exception {
     // given
-    String token = providerAt(Instant.now()).issue(member(7L));
+    String token = providerAt(Instant.now()).issue(member(7L), FAMILY_ID);
 
     // when
     ResultActions result =
@@ -101,6 +113,66 @@ class SecurityConfigTest {
     result.andExpect(status().isOk());
   }
 
+  @Test
+  @DisplayName("무효화된 로그인 세션의 토큰이면 401을 반환한다")
+  void returnsUnauthorizedWhenSessionIsRevoked() throws Exception {
+    // given
+    String token = providerAt(Instant.now()).issue(member(7L), FAMILY_ID);
+    given(refreshTokenRepository.isFamilyRevoked(FAMILY_ID)).willReturn(true);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result.andExpect(unauthorizedProblemDetail());
+  }
+
+  @Test
+  @DisplayName("로그인 세션 정보가 없는 토큰이면 401을 반환한다")
+  void returnsUnauthorizedWithoutSessionClaim() throws Exception {
+    // given
+    Instant now = Instant.now();
+    JwtClaimsSet claims =
+        JwtClaimsSet.builder()
+            .subject("7")
+            .claim(AccessTokenProvider.ROLE_CLAIM, "USER")
+            .issuedAt(now)
+            .expiresAt(now.plus(properties.accessTokenValidity()))
+            .build();
+    String token =
+        jwtEncoder
+            .encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
+            .getTokenValue();
+
+    // when
+    ResultActions result =
+        mockMvc.perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result.andExpect(unauthorizedProblemDetail());
+  }
+
+  @Test
+  @DisplayName("로그인 세션을 확인할 수 없으면 503을 반환한다")
+  void returnsServiceUnavailableWhenSessionCannotBeChecked() throws Exception {
+    // given
+    String token = providerAt(Instant.now()).issue(member(7L), FAMILY_ID);
+    given(refreshTokenRepository.isFamilyRevoked(FAMILY_ID))
+        .willThrow(new BusinessException(ErrorCode.AUTH_STORE_UNAVAILABLE));
+
+    // when
+    ResultActions result =
+        mockMvc.perform(get(PROTECTED_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.instance").value(PROTECTED_PATH))
+        .andExpect(jsonPath("$.code").value("AUTH_STORE_UNAVAILABLE"));
+  }
+
   private ResultMatcher unauthorizedProblemDetail() {
     return result -> {
       status().isUnauthorized().match(result);
@@ -117,7 +189,7 @@ class SecurityConfigTest {
             .minus(properties.accessTokenValidity())
             .minus(DEFAULT_CLOCK_SKEW)
             .minusSeconds(1);
-    return providerAt(issuedAt).issue(member(7L));
+    return providerAt(issuedAt).issue(member(7L), FAMILY_ID);
   }
 
   private AccessTokenProvider providerAt(Instant now) {

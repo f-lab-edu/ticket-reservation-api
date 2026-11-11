@@ -6,12 +6,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ticketing.reservation.auth.config.AuthProperties;
 import com.ticketing.reservation.auth.config.JwtConfig;
 import com.ticketing.reservation.auth.dto.TokenResponse;
+import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
 import com.ticketing.reservation.auth.service.AuthService;
+import com.ticketing.reservation.auth.token.AccessTokenProvider;
 import com.ticketing.reservation.global.config.SecurityConfig;
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
+import com.ticketing.reservation.member.domain.Member;
+import java.time.Clock;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -20,8 +25,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -33,8 +41,11 @@ class AuthControllerTest {
       TokenResponse.bearer("access-token", 1800, "refresh-token");
 
   @Autowired private MockMvc mockMvc;
+  @Autowired private JwtEncoder jwtEncoder;
+  @Autowired private AuthProperties properties;
 
   @MockitoBean private AuthService authService;
+  @MockitoBean private RefreshTokenRepository refreshTokenRepository;
 
   @Nested
   @DisplayName("로그인")
@@ -153,6 +164,32 @@ class AuthControllerTest {
       // then
       result.andExpect(status().isBadRequest());
       then(authService).shouldHaveNoInteractions();
+    }
+  }
+
+  @Nested
+  @DisplayName("로그아웃")
+  class Logout {
+
+    @Test
+    @DisplayName("로그아웃하면 해당 로그인 세션을 무효화하고 204를 반환한다")
+    void returnsNoContentWhenLogoutSucceeds() throws Exception {
+      // given
+      Member member = Member.create("user@example.com", "{bcrypt}hash");
+      ReflectionTestUtils.setField(member, "id", 1L);
+      String accessToken =
+          new AccessTokenProvider(jwtEncoder, properties, Clock.systemUTC())
+              .issue(member, "family");
+
+      // when
+      ResultActions result =
+          mockMvc.perform(
+              post("/api/v1/auth/logout")
+                  .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken));
+
+      // then
+      result.andExpect(status().isNoContent());
+      then(authService).should().logout("family");
     }
   }
 }

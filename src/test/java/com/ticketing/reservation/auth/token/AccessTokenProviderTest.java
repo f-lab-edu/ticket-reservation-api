@@ -24,17 +24,18 @@ class AccessTokenProviderTest {
   private static final String SECRET = "unit-test-jwt-secret-key-32-bytes-or-more";
   private static final Duration VALIDITY = Duration.ofMinutes(30);
   private static final Duration DEFAULT_CLOCK_SKEW = Duration.ofSeconds(60);
+  private static final String FAMILY_ID = "family";
 
   private final AuthProperties properties = new AuthProperties(SECRET, VALIDITY);
   private final JwtConfig jwtConfig = new JwtConfig(properties);
   private final JwtDecoder jwtDecoder = jwtConfig.jwtDecoder();
 
   @Test
-  @DisplayName("발급한 토큰에 회원 식별자, 권한 및 만료 정보가 포함된다")
+  @DisplayName("발급한 토큰에 회원 식별자, 권한, 로그인 세션 및 만료 정보가 포함된다")
   void issuesTokenWithMemberIdAndRole() {
     // given
     Instant now = Instant.now();
-    String token = providerAt(now).issue(member(1L));
+    String token = providerAt(now).issue(member(1L), FAMILY_ID);
 
     // when
     Jwt jwt = jwtDecoder.decode(token);
@@ -42,6 +43,7 @@ class AccessTokenProviderTest {
     // then
     assertThat(jwt.getSubject()).isEqualTo("1");
     assertThat(jwt.getClaimAsString(AccessTokenProvider.ROLE_CLAIM)).isEqualTo("USER");
+    assertThat(jwt.getClaimAsString(AccessTokenProvider.SESSION_CLAIM)).isEqualTo(FAMILY_ID);
     assertThat(jwt.getHeaders()).containsEntry("alg", "HS256");
     assertThat(jwt.getExpiresAt()).isEqualTo(jwt.getIssuedAt().plus(VALIDITY));
   }
@@ -51,7 +53,7 @@ class AccessTokenProviderTest {
   void rejectsExpiredToken() {
     // given
     Instant issuedAt = Instant.now().minus(VALIDITY).minus(DEFAULT_CLOCK_SKEW).minusSeconds(1);
-    String token = providerAt(issuedAt).issue(member(1L));
+    String token = providerAt(issuedAt).issue(member(1L), FAMILY_ID);
 
     // when
     Throwable thrown = catchThrowable(() -> jwtDecoder.decode(token));
@@ -69,7 +71,7 @@ class AccessTokenProviderTest {
     String token =
         new AccessTokenProvider(
                 new JwtConfig(otherProperties).jwtEncoder(), otherProperties, Clock.systemUTC())
-            .issue(member(1L));
+            .issue(member(1L), FAMILY_ID);
 
     // when
     Throwable thrown = catchThrowable(() -> jwtDecoder.decode(token));
@@ -82,7 +84,7 @@ class AccessTokenProviderTest {
   @DisplayName("변조된 토큰이면 검증에 실패한다")
   void rejectsTamperedToken() {
     // given
-    String[] parts = providerAt(Instant.now()).issue(member(1L)).split("\\.");
+    String[] parts = providerAt(Instant.now()).issue(member(1L), FAMILY_ID).split("\\.");
     String forgedPayload =
         Base64.getUrlEncoder()
             .withoutPadding()

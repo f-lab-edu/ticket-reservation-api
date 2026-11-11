@@ -85,19 +85,19 @@ class AuthServiceTest {
 
       // then
       Jwt jwt = jwtDecoder.decode(tokens.accessToken());
+      RefreshToken storedToken = getStoredToken(tokens.refreshToken());
+
       assertThat(jwt.getSubject()).isEqualTo(String.valueOf(member.getId()));
       assertThat(jwt.getClaimAsString(AccessTokenProvider.ROLE_CLAIM)).isEqualTo("USER");
+      assertThat(jwt.getClaimAsString(AccessTokenProvider.SESSION_CLAIM))
+          .isEqualTo(storedToken.familyId());
       assertThat(tokens.tokenType()).isEqualTo("Bearer");
       assertThat(tokens.expiresIn()).isEqualTo(properties.accessTokenValidity().toSeconds());
       assertThat(tokens.refreshToken()).isNotBlank();
-      assertThat(getStoredToken(tokens.refreshToken()))
-          .satisfies(
-              token -> {
-                assertThat(token.memberId()).isEqualTo(member.getId());
-                assertThat(token.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
-                assertThat(token.expiresAt())
-                    .isEqualTo(token.createdAt().plus(refreshTokenProperties.validity()));
-              });
+      assertThat(storedToken.memberId()).isEqualTo(member.getId());
+      assertThat(storedToken.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
+      assertThat(storedToken.expiresAt())
+          .isEqualTo(storedToken.createdAt().plus(refreshTokenProperties.validity()));
       assertThat(redisTemplate.hasKey("auth:refresh-token:" + tokens.refreshToken())).isFalse();
     }
 
@@ -140,13 +140,16 @@ class AuthServiceTest {
 
       // when
       TokenResponse refreshed = authService.refresh(login.refreshToken());
-      RefreshToken usedToken = getStoredToken(login.refreshToken());
-      RefreshToken newToken = getStoredToken(refreshed.refreshToken());
 
       // then
       Jwt jwt = jwtDecoder.decode(refreshed.accessToken());
+      RefreshToken usedToken = getStoredToken(login.refreshToken());
+      RefreshToken newToken = getStoredToken(refreshed.refreshToken());
+
       assertThat(jwt.getSubject()).isEqualTo(String.valueOf(member.getId()));
       assertThat(jwt.getClaimAsString(AccessTokenProvider.ROLE_CLAIM)).isEqualTo("USER");
+      assertThat(jwt.getClaimAsString(AccessTokenProvider.SESSION_CLAIM))
+          .isEqualTo(usedToken.familyId());
       assertThat(refreshed.refreshToken()).isNotEqualTo(login.refreshToken());
       assertThat(usedToken.status()).isEqualTo(RefreshTokenStatus.USED);
       assertThat(newToken.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
@@ -233,6 +236,27 @@ class AuthServiceTest {
       String rotatedToken = successResponses.getFirst().refreshToken();
       Throwable revokedTokenThrown = catchThrowable(() -> authService.refresh(rotatedToken));
       assertThat(revokedTokenThrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
+    }
+  }
+
+  @Nested
+  @DisplayName("로그아웃")
+  class Logout {
+
+    @Test
+    @DisplayName("로그아웃하면 같은 로그인 세션을 무효화해 이후 재발급을 거부한다")
+    void revokesLoginSession() {
+      // given
+      String refreshToken = authService.login(EMAIL, PASSWORD).refreshToken();
+      String familyId = getStoredToken(refreshToken).familyId();
+
+      // when
+      authService.logout(familyId);
+
+      // then
+      assertThat(refreshTokenRepository.isFamilyRevoked(familyId)).isTrue();
+      Throwable thrown = catchThrowable(() -> authService.refresh(refreshToken));
+      assertThat(thrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
     }
   }
 

@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ticketing.reservation.auth.config.JwtConfig;
+import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
 import com.ticketing.reservation.global.config.SecurityConfig;
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
@@ -37,6 +38,7 @@ class MemberControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private MemberService memberService;
+  @MockitoBean private RefreshTokenRepository refreshTokenRepository;
 
   @Nested
   @DisplayName("이메일 중복 확인")
