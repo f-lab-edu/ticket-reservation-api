@@ -23,6 +23,7 @@ public class RefreshTokenRepository {
   private static final Logger log = LoggerFactory.getLogger(RefreshTokenRepository.class);
 
   private static final String KEY_PREFIX = "auth:refresh-token:";
+  private static final String FAMILY_KEY_PREFIX = "auth:refresh-token-family:";
 
   private static final String FIELD_MEMBER_ID = "memberId";
   private static final String FIELD_FAMILY_ID = "familyId";
@@ -55,16 +56,26 @@ public class RefreshTokenRepository {
           """
           saveActiveToken(KEYS[1], ARGV[1], ARGV[2], now, ARGV[3], ARGV[4])
           return 1
-          """);
+          """,
+          Long.class);
 
-  private static final RedisScript<Long> ROTATE =
+  private static final RedisScript<String> ROTATE =
       script(
           """
-          if redis.call('HGET', KEYS[1], 'status') ~= 'ACTIVE' then
-            return 0
+          if redis.call('EXISTS', KEYS[3]) == 1 then
+            return 'REJECTED'
+          end
+          local status = redis.call('HGET', KEYS[1], 'status')
+          if status == 'USED' then
+            redis.call('SET', KEYS[3], 'REVOKED',
+              'PXAT', string.format('%.0f', now + tonumber(ARGV[1])))
+            return 'REUSED'
+          end
+          if status ~= 'ACTIVE' then
+            return 'REJECTED'
           end
           if tonumber(redis.call('HGET', KEYS[1], 'expiresAt')) <= now then
-            return 0
+            return 'REJECTED'
           end
           redis.call('HSET', KEYS[1], 'status', 'USED')
           saveActiveToken(
@@ -74,8 +85,9 @@ public class RefreshTokenRepository {
             now,
             ARGV[1],
             ARGV[2])
-          return 1
-          """);
+          return 'ROTATED'
+          """,
+          String.class);
 
   private final StringRedisTemplate redisTemplate;
   private final long validityMillis;
@@ -108,20 +120,20 @@ public class RefreshTokenRepository {
     return Optional.of(toToken(tokenHash, fields));
   }
 
-  public boolean rotate(String currentHash, String newHash) {
-    Long rotated =
+  public RotationResult rotate(String currentHash, String newHash, String familyId) {
+    String result =
         execute(
             () ->
                 redisTemplate.execute(
                     ROTATE,
-                    List.of(key(currentHash), key(newHash)),
+                    List.of(key(currentHash), key(newHash), familyKey(familyId)),
                     String.valueOf(validityMillis),
                     String.valueOf(retentionMillis)));
-    return Long.valueOf(1L).equals(rotated);
+    return RotationResult.valueOf(result);
   }
 
-  private static RedisScript<Long> script(String body) {
-    return RedisScript.of(CURRENT_TIME_MILLIS + SAVE_ACTIVE_TOKEN + body, Long.class);
+  private static <T> RedisScript<T> script(String body, Class<T> resultType) {
+    return RedisScript.of(CURRENT_TIME_MILLIS + SAVE_ACTIVE_TOKEN + body, resultType);
   }
 
   private static RefreshToken toToken(String tokenHash, Map<Object, Object> fields) {
@@ -140,6 +152,10 @@ public class RefreshTokenRepository {
 
   private static String key(String tokenHash) {
     return KEY_PREFIX + tokenHash;
+  }
+
+  private static String familyKey(String familyId) {
+    return FAMILY_KEY_PREFIX + familyId;
   }
 
   private static <T> T execute(Supplier<T> command) {
