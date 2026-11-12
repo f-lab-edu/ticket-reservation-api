@@ -43,6 +43,9 @@
 | `INVALID_REFRESH_TOKEN` | 401 | 리프레시 토큰이 유효하지 않습니다. |
 | `FORBIDDEN` | 403 | 요청한 작업을 수행할 권한이 없습니다. |
 | `AUTH_STORE_UNAVAILABLE` | 503 | 인증 서비스를 일시적으로 사용할 수 없습니다. |
+| `INVALID_SALE_START_AT` | 400 | 판매 시작 일시는 현재 시각보다 늦어야 합니다. |
+| `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시는 판매 시작 일시보다 늦어야 합니다. |
+| `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시는 공연 일시보다 빨라야 합니다. |
 
 ### 1.3. 인증
 
@@ -231,3 +234,72 @@ Authorization: Bearer {accessToken}
 #### 비고
 - 같은 로그인 세션의 액세스 토큰과 리프레시 토큰을 모두 즉시 무효화합니다.
 - 액세스 토큰이 만료됐으면 재발급(3.2) 후 로그아웃합니다.
+
+## 4. 공연
+
+- 일시는 한국 시간(Asia/Seoul) 기준이며, 시간대 없이 `yyyy-MM-dd'T'HH:mm:ss` 형식(ISO-8601)으로 주고받습니다. 예: `2026-12-20T19:00:00`
+
+### 4.1. 공연 등록
+
+`POST /api/v1/performances` · 인증 필요(관리자) · 기능정의서 4.4
+
+#### 요청
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `title` | string | O | 공연명 (공백만으로 구성할 수 없음, 100자 이하) |
+| `venue` | string | O | 공연 장소 (공백만으로 구성할 수 없음, 100자 이하) |
+| `performanceAt` | string | O | 공연 일시 |
+| `price` | number | O | 티켓 가격 (0 이상, 4.4.1.2.1) |
+| `totalQuantity` | number | O | 총 판매 수량 (1 이상, 4.4.1.2.2) |
+| `saleStartAt` | string | O | 판매 시작 일시 (4.4.1.2.3) |
+| `saleEndAt` | string | O | 판매 종료 일시 (4.4.1.2.4, 4.4.1.2.5) |
+
+```json
+{
+  "title": "콘서트1",
+  "venue": "장소A",
+  "performanceAt": "2026-12-20T19:00:00",
+  "price": 50000,
+  "totalQuantity": 100,
+  "saleStartAt": "2026-12-01T10:00:00",
+  "saleEndAt": "2026-12-19T23:59:59"
+}
+```
+
+#### 응답: `201 Created`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | number | 공연 식별자 |
+| `title` | string | 공연명 |
+| `venue` | string | 공연 장소 |
+| `performanceAt` | string | 공연 일시 |
+| `price` | number | 티켓 가격 |
+| `totalQuantity` | number | 총 판매 수량 |
+| `remainingQuantity` | number | 잔여 판매 수량 (등록 시 총 판매 수량과 같음, 4.4.1.3) |
+| `saleStartAt` | string | 판매 시작 일시 |
+| `saleEndAt` | string | 판매 종료 일시 |
+
+```json
+{
+  "id": 1,
+  "title": "콘서트1",
+  "venue": "장소A",
+  "performanceAt": "2026-12-20T19:00:00",
+  "price": 50000,
+  "totalQuantity": 100,
+  "remainingQuantity": 100,
+  "saleStartAt": "2026-12-01T10:00:00",
+  "saleEndAt": "2026-12-19T23:59:59"
+}
+```
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | 요청값이 필수 여부·형식·조건을 만족하지 않음 |
+| `INVALID_SALE_START_AT` | 400 | 판매 시작 일시가 현재 시각과 같거나 빠름 |
+| `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시가 판매 시작 일시와 같거나 빠름 |
+| `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시가 공연 일시와 같거나 늦음 |
