@@ -1,5 +1,7 @@
 package com.ticketing.reservation.performance.service;
 
+import com.ticketing.reservation.global.error.BusinessException;
+import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.performance.domain.Performance;
 import com.ticketing.reservation.performance.domain.SalePeriod;
 import com.ticketing.reservation.performance.dto.PerformanceRequest;
@@ -32,5 +34,12 @@ public class PerformanceService {
             new SalePeriod(request.saleStartAt(), request.saleEndAt()),
             LocalDateTime.now(clock));
     return performanceRepository.save(performance);
+  }
+
+  @Transactional(readOnly = true)
+  public Performance getPerformance(Long performanceId) {
+    return performanceRepository
+        .findById(performanceId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.PERFORMANCE_NOT_FOUND));
   }
 }

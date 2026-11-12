@@ -46,6 +46,7 @@
 | `INVALID_SALE_START_AT` | 400 | 판매 시작 일시는 현재 시각보다 늦어야 합니다. |
 | `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시는 판매 시작 일시보다 늦어야 합니다. |
 | `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시는 공연 일시보다 빨라야 합니다. |
+| `PERFORMANCE_NOT_FOUND` | 404 | 공연을 찾을 수 없습니다. |
 
 ### 1.3. 인증
 
@@ -263,7 +264,7 @@ Authorization: Bearer {accessToken}
   "price": 50000,
   "totalQuantity": 100,
   "saleStartAt": "2026-12-01T10:00:00",
-  "saleEndAt": "2026-12-19T23:59:59"
+  "saleEndAt": "2026-12-19T18:00:00"
 }
 ```
 
@@ -291,7 +292,7 @@ Authorization: Bearer {accessToken}
   "totalQuantity": 100,
   "remainingQuantity": 100,
   "saleStartAt": "2026-12-01T10:00:00",
-  "saleEndAt": "2026-12-19T23:59:59"
+  "saleEndAt": "2026-12-19T18:00:00"
 }
 ```
 
@@ -303,3 +304,24 @@ Authorization: Bearer {accessToken}
 | `INVALID_SALE_START_AT` | 400 | 판매 시작 일시가 현재 시각과 같거나 빠름 |
 | `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시가 판매 시작 일시와 같거나 빠름 |
 | `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시가 공연 일시와 같거나 늦음 |
+
+### 4.2. 공연 상세 조회
+
+`GET /api/v1/performances/{performanceId}` · 인증 불필요 · 기능정의서 4.7
+
+#### 요청
+
+| 파라미터 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `performanceId` | path | number | O | 공연 식별자 |
+
+#### 응답: `200 OK`
+
+공연 등록 응답(4.1)과 같습니다.
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | `performanceId`가 숫자가 아님 |
+| `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |

@@ -1,7 +1,10 @@
 package com.ticketing.reservation.integration.performance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
+import com.ticketing.reservation.global.error.BusinessException;
+import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.performance.domain.Performance;
 import com.ticketing.reservation.performance.domain.SalePeriod;
@@ -53,5 +56,18 @@ class PerformanceServiceTest {
     assertThat(saved.getPrice()).isEqualTo(50_000);
     assertThat(saved.getTotalQuantity()).isEqualTo(100);
     assertThat(saved.getSalePeriod()).isEqualTo(new SalePeriod(saleStartAt, saleEndAt));
+  }
+
+  @Test
+  @DisplayName("없는 공연을 조회하면 공연 없음 예외가 발생한다")
+  void throwsNotFoundWhenPerformanceDoesNotExist() {
+    // when
+    Throwable thrown = catchThrowable(() -> performanceService.getPerformance(Long.MAX_VALUE));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PERFORMANCE_NOT_FOUND));
   }
 }
