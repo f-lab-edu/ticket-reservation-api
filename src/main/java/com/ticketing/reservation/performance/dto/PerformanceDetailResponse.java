@@ -3,7 +3,7 @@ package com.ticketing.reservation.performance.dto;
 import com.ticketing.reservation.performance.domain.Performance;
 import java.time.LocalDateTime;
 
-public record PerformanceResponse(
+public record PerformanceDetailResponse(
     Long id,
     String title,
     String venue,
@@ -14,8 +14,8 @@ public record PerformanceResponse(
     LocalDateTime saleStartAt,
     LocalDateTime saleEndAt) {
 
-  public static PerformanceResponse from(Performance performance) {
-    return new PerformanceResponse(
+  public static PerformanceDetailResponse from(Performance performance) {
+    return new PerformanceDetailResponse(
         performance.getId(),
         performance.getTitle(),
         performance.getVenue(),

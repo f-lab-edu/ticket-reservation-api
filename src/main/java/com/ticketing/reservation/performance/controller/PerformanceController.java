@@ -1,8 +1,8 @@
 package com.ticketing.reservation.performance.controller;
 
 import com.ticketing.reservation.global.web.ApiPaths;
+import com.ticketing.reservation.performance.dto.PerformanceDetailResponse;
 import com.ticketing.reservation.performance.dto.PerformanceRequest;
-import com.ticketing.reservation.performance.dto.PerformanceResponse;
 import com.ticketing.reservation.performance.service.PerformanceService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -24,7 +24,7 @@ public class PerformanceController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  public PerformanceResponse register(@Valid @RequestBody PerformanceRequest request) {
-    return PerformanceResponse.from(performanceService.register(request));
+  public PerformanceDetailResponse register(@Valid @RequestBody PerformanceRequest request) {
+    return PerformanceDetailResponse.from(performanceService.register(request));
   }
 }
