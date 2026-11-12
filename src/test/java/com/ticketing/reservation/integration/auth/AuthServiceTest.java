@@ -19,6 +19,7 @@ import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.repository.MemberRepository;
 import com.ticketing.reservation.member.service.MemberService;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Callable;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -85,19 +87,19 @@ class AuthServiceTest {
 
       // then
       Jwt jwt = jwtDecoder.decode(tokens.accessToken());
+      RefreshToken storedToken = getStoredToken(tokens.refreshToken());
+
       assertThat(jwt.getSubject()).isEqualTo(String.valueOf(member.getId()));
       assertThat(jwt.getClaimAsString(AccessTokenProvider.ROLE_CLAIM)).isEqualTo("USER");
+      assertThat(jwt.getClaimAsString(AccessTokenProvider.SESSION_CLAIM))
+          .isEqualTo(storedToken.familyId());
       assertThat(tokens.tokenType()).isEqualTo("Bearer");
       assertThat(tokens.expiresIn()).isEqualTo(properties.accessTokenValidity().toSeconds());
       assertThat(tokens.refreshToken()).isNotBlank();
-      assertThat(getStoredToken(tokens.refreshToken()))
-          .satisfies(
-              token -> {
-                assertThat(token.memberId()).isEqualTo(member.getId());
-                assertThat(token.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
-                assertThat(token.expiresAt())
-                    .isEqualTo(token.createdAt().plus(refreshTokenProperties.validity()));
-              });
+      assertThat(storedToken.memberId()).isEqualTo(member.getId());
+      assertThat(storedToken.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
+      assertThat(storedToken.expiresAt())
+          .isEqualTo(storedToken.createdAt().plus(refreshTokenProperties.validity()));
       assertThat(redisTemplate.hasKey("auth:refresh-token:" + tokens.refreshToken())).isFalse();
     }
 
@@ -140,13 +142,16 @@ class AuthServiceTest {
 
       // when
       TokenResponse refreshed = authService.refresh(login.refreshToken());
-      RefreshToken usedToken = getStoredToken(login.refreshToken());
-      RefreshToken newToken = getStoredToken(refreshed.refreshToken());
 
       // then
       Jwt jwt = jwtDecoder.decode(refreshed.accessToken());
+      RefreshToken usedToken = getStoredToken(login.refreshToken());
+      RefreshToken newToken = getStoredToken(refreshed.refreshToken());
+
       assertThat(jwt.getSubject()).isEqualTo(String.valueOf(member.getId()));
       assertThat(jwt.getClaimAsString(AccessTokenProvider.ROLE_CLAIM)).isEqualTo("USER");
+      assertThat(jwt.getClaimAsString(AccessTokenProvider.SESSION_CLAIM))
+          .isEqualTo(usedToken.familyId());
       assertThat(refreshed.refreshToken()).isNotEqualTo(login.refreshToken());
       assertThat(usedToken.status()).isEqualTo(RefreshTokenStatus.USED);
       assertThat(newToken.status()).isEqualTo(RefreshTokenStatus.ACTIVE);
@@ -236,13 +241,67 @@ class AuthServiceTest {
     }
   }
 
-  private static <T> List<T> runConcurrently(int threadCount, Callable<T> task) throws Exception {
-    CountDownLatch ready = new CountDownLatch(threadCount);
-    CountDownLatch start = new CountDownLatch(1);
-    List<Future<T>> futures = new ArrayList<>();
+  @Nested
+  @DisplayName("로그아웃")
+  class Logout {
 
-    try (ExecutorService executor = Executors.newFixedThreadPool(threadCount)) {
-      for (int i = 0; i < threadCount; i++) {
+    @Test
+    @DisplayName("로그아웃하면 같은 로그인 세션을 무효화해 이후 재발급을 거부한다")
+    void revokesLoginSession() {
+      // given
+      String refreshToken = authService.login(EMAIL, PASSWORD).refreshToken();
+      String familyId = getStoredToken(refreshToken).familyId();
+
+      // when
+      authService.logout(familyId);
+
+      // then
+      assertThat(refreshTokenRepository.isFamilyRevoked(familyId)).isTrue();
+      Throwable thrown = catchThrowable(() -> authService.refresh(refreshToken));
+      assertThat(thrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
+    }
+
+    @RepeatedTest(10)
+    @DisplayName("재발급과 로그아웃이 동시에 일어나도 같은 로그인 세션의 토큰을 모두 무효화한다")
+    void revokesLoginSessionOnConcurrentRefreshAndLogout() throws Exception {
+      // given
+      String refreshToken = authService.login(EMAIL, PASSWORD).refreshToken();
+      String familyId = getStoredToken(refreshToken).familyId();
+
+      // when
+      List<TokenResponse> responses =
+          runConcurrently(
+              List.of(
+                  () -> refreshOrNull(refreshToken),
+                  () -> {
+                    authService.logout(familyId);
+                    return null;
+                  }));
+
+      // then
+      assertThat(refreshTokenRepository.isFamilyRevoked(familyId)).isTrue();
+      responses.stream()
+          .filter(Objects::nonNull)
+          .map(TokenResponse::refreshToken)
+          .forEach(
+              rotatedToken -> {
+                Throwable thrown = catchThrowable(() -> authService.refresh(rotatedToken));
+                assertThat(thrown).satisfies(hasErrorCode(ErrorCode.INVALID_REFRESH_TOKEN));
+              });
+    }
+  }
+
+  private static <T> List<T> runConcurrently(int threadCount, Callable<T> task) throws Exception {
+    return runConcurrently(Collections.nCopies(threadCount, task));
+  }
+
+  private static <T> List<T> runConcurrently(List<Callable<T>> tasks) throws Exception {
+    CountDownLatch ready = new CountDownLatch(tasks.size());
+    CountDownLatch start = new CountDownLatch(1);
+
+    try (ExecutorService executor = Executors.newFixedThreadPool(tasks.size())) {
+      List<Future<T>> futures = new ArrayList<>();
+      for (Callable<T> task : tasks) {
         futures.add(
             executor.submit(
                 () -> {
@@ -253,13 +312,13 @@ class AuthServiceTest {
       }
       ready.await();
       start.countDown();
-    }
 
-    List<T> results = new ArrayList<>();
-    for (Future<T> future : futures) {
-      results.add(future.get());
+      List<T> results = new ArrayList<>();
+      for (Future<T> future : futures) {
+        results.add(future.get());
+      }
+      return results;
     }
-    return results;
   }
 
   private TokenResponse refreshOrNull(String refreshToken) {

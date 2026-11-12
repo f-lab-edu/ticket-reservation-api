@@ -56,7 +56,8 @@ Authorization: Bearer {accessToken}
 | 상황 | status | code | `WWW-Authenticate` |
 |---|---|---|---|
 | Bearer 토큰을 보내지 않음 (`Authorization` 헤더가 없거나 Basic 등 다른 인증 방식) | 401 | `UNAUTHORIZED` | `Bearer` |
-| 액세스 토큰이 만료됐거나 서명·형식이 올바르지 않음 | 401 | `UNAUTHORIZED` | `Bearer error="invalid_token", error_description="...", error_uri="..."` |
+| 액세스 토큰이 만료됐거나, 무효화됐거나, 서명·형식이 올바르지 않음 | 401 | `UNAUTHORIZED` | `Bearer error="invalid_token", error_description="...", error_uri="..."` |
+| 로그인 세션 무효화 여부를 확인할 수 없음 (토큰 저장소 장애) | 503 | `AUTH_STORE_UNAVAILABLE` | 없음 |
 
 - 액세스 토큰 만료는 60초의 기본 허용 오차를 두고 판정합니다. 만료 시각(`exp`)이 지난 뒤 60초 이내의 토큰은 아직 유효한 것으로 처리합니다.
 - 인증이 필요 없는 API는 `Authorization` 헤더를 확인하지 않습니다. 만료된 토큰을 붙여 호출해도 거절되지 않습니다.
@@ -203,5 +204,28 @@ Authorization: Bearer {accessToken}
 | `AUTH_STORE_UNAVAILABLE` | 503 | 토큰 저장소 장애 |
 
 #### 비고
-- 이미 사용된 리프레시 토큰으로 요청하면 탈취로 간주하며 해당 토큰이 속한 로그인 세션의 모든 리프레시 토큰을 무효화합니다.
+- 이미 사용된 리프레시 토큰으로 요청하면 탈취로 간주하며 해당 토큰이 속한 로그인 세션의 모든 액세스 토큰과 리프레시 토큰을 무효화합니다.
 - 동일한 리프레시 토큰으로 동시에 재발급 요청이 발생하면 해당 로그인 세션이 무효화되어 재로그인이 필요합니다.
+
+### 3.3. 로그아웃
+
+`POST /api/v1/auth/logout` · 인증 필요(회원) · 기능정의서 4.3.3
+
+#### 요청
+
+요청 본문이 없습니다. 액세스 토큰(1.3)으로 로그인 세션을 식별합니다.
+
+#### 응답: `204 No Content`
+
+본문이 없습니다.
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| `UNAUTHORIZED` | 401 | 유효하지 않은 액세스 토큰 |
+| `AUTH_STORE_UNAVAILABLE` | 503 | 토큰 저장소 장애 |
+
+#### 비고
+- 같은 로그인 세션의 액세스 토큰과 리프레시 토큰을 모두 즉시 무효화합니다.
+- 액세스 토큰이 만료됐으면 재발급(3.2) 후 로그아웃합니다.

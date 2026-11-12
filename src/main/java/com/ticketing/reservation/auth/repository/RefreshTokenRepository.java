@@ -51,6 +51,14 @@ public class RefreshTokenRepository {
       end
       """;
 
+  private static final String REVOKE_FAMILY_FUNCTION =
+      """
+      local function revokeFamily(key, now, validityMillis)
+        redis.call('SET', key, 'REVOKED',
+          'PXAT', string.format('%.0f', now + tonumber(validityMillis)))
+      end
+      """;
+
   private static final RedisScript<Long> SAVE =
       script(
           """
@@ -67,8 +75,7 @@ public class RefreshTokenRepository {
           end
           local status = redis.call('HGET', KEYS[1], 'status')
           if status == 'USED' then
-            redis.call('SET', KEYS[3], 'REVOKED',
-              'PXAT', string.format('%.0f', now + tonumber(ARGV[1])))
+            revokeFamily(KEYS[3], now, ARGV[1])
             return 'REUSED'
           end
           if status ~= 'ACTIVE' then
@@ -88,6 +95,14 @@ public class RefreshTokenRepository {
           return 'ROTATED'
           """,
           String.class);
+
+  private static final RedisScript<Long> REVOKE_FAMILY =
+      script(
+          """
+          revokeFamily(KEYS[1], now, ARGV[1])
+          return 1
+          """,
+          Long.class);
 
   private final StringRedisTemplate redisTemplate;
   private final long validityMillis;
@@ -132,8 +147,20 @@ public class RefreshTokenRepository {
     return RotationResult.valueOf(result);
   }
 
+  public void revokeFamily(String familyId) {
+    execute(
+        () ->
+            redisTemplate.execute(
+                REVOKE_FAMILY, List.of(familyKey(familyId)), String.valueOf(validityMillis)));
+  }
+
+  public boolean isFamilyRevoked(String familyId) {
+    return Boolean.TRUE.equals(execute(() -> redisTemplate.hasKey(familyKey(familyId))));
+  }
+
   private static <T> RedisScript<T> script(String body, Class<T> resultType) {
-    return RedisScript.of(CURRENT_TIME_MILLIS + SAVE_ACTIVE_TOKEN + body, resultType);
+    return RedisScript.of(
+        CURRENT_TIME_MILLIS + SAVE_ACTIVE_TOKEN + REVOKE_FAMILY_FUNCTION + body, resultType);
   }
 
   private static RefreshToken toToken(String tokenHash, Map<Object, Object> fields) {

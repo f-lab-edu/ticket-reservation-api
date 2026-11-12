@@ -1,15 +1,15 @@
 package com.ticketing.reservation.global.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ticketing.reservation.auth.filter.RevokedSessionFilter;
+import com.ticketing.reservation.auth.repository.RefreshTokenRepository;
 import com.ticketing.reservation.auth.token.AccessTokenProvider;
 import com.ticketing.reservation.global.error.ErrorCode;
+import com.ticketing.reservation.global.error.ProblemDetailWriter;
 import jakarta.servlet.DispatcherType;
-import java.net.URI;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
@@ -38,9 +39,11 @@ public class SecurityConfig {
           PATH.matcher(HttpMethod.POST, "/api/v1/auth/refresh"));
 
   @Bean
-  public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper)
+  public SecurityFilterChain securityFilterChain(
+      HttpSecurity http, ObjectMapper objectMapper, RefreshTokenRepository refreshTokenRepository)
       throws Exception {
-    AuthenticationEntryPoint entryPoint = problemDetailEntryPoint(objectMapper);
+    ProblemDetailWriter problemDetailWriter = new ProblemDetailWriter(objectMapper);
+    AuthenticationEntryPoint entryPoint = problemDetailEntryPoint(problemDetailWriter);
     return http.csrf(AbstractHttpConfigurer::disable)
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
@@ -62,24 +65,19 @@ public class SecurityConfig {
                     .bearerTokenResolver(bearerTokenResolver())
                     .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                     .authenticationEntryPoint(entryPoint))
+        .addFilterAfter(
+            new RevokedSessionFilter(refreshTokenRepository, entryPoint, problemDetailWriter),
+            BearerTokenAuthenticationFilter.class)
         .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(entryPoint))
         .build();
   }
 
-  private static AuthenticationEntryPoint problemDetailEntryPoint(ObjectMapper objectMapper) {
+  private static AuthenticationEntryPoint problemDetailEntryPoint(
+      ProblemDetailWriter problemDetailWriter) {
     AuthenticationEntryPoint delegate = new BearerTokenAuthenticationEntryPoint();
     return (request, response, authException) -> {
       delegate.commence(request, response, authException);
-
-      ErrorCode errorCode = ErrorCode.UNAUTHORIZED;
-      ProblemDetail problemDetail =
-          ProblemDetail.forStatusAndDetail(errorCode.getStatus(), errorCode.getDetail());
-      problemDetail.setInstance(URI.create(request.getRequestURI()));
-      problemDetail.setProperty("code", errorCode.name());
-
-      response.setStatus(errorCode.getStatus().value());
-      response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-      objectMapper.writeValue(response.getOutputStream(), problemDetail);
+      problemDetailWriter.write(request, response, ErrorCode.UNAUTHORIZED);
     };
   }
 

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 public class AccessTokenProvider {
 
   public static final String ROLE_CLAIM = "role";
+  public static final String SESSION_CLAIM = "sid";
 
   private final JwtEncoder jwtEncoder;
   private final Duration validity;
@@ -27,12 +28,13 @@ public class AccessTokenProvider {
     this.clock = clock;
   }
 
-  public String issue(Member member) {
+  public String issue(Member member, String familyId) {
     Instant now = clock.instant();
     JwtClaimsSet claims =
         JwtClaimsSet.builder()
             .subject(String.valueOf(member.getId()))
             .claim(ROLE_CLAIM, member.getRole().name())
+            .claim(SESSION_CLAIM, familyId)
             .issuedAt(now)
             .expiresAt(now.plus(validity))
             .build();

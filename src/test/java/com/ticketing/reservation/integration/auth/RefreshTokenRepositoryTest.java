@@ -86,10 +86,11 @@ class RefreshTokenRepositoryTest {
 
     // when
     RotationResult result = repository.rotate("old", "new", FAMILY);
+
+    // then
     RefreshToken usedToken = repository.findByTokenHash("old").orElseThrow();
     RefreshToken newToken = repository.findByTokenHash("new").orElseThrow();
 
-    // then
     assertThat(result).isEqualTo(RotationResult.ROTATED);
     assertThat(usedToken.status()).isEqualTo(RefreshTokenStatus.USED);
 
@@ -134,6 +135,26 @@ class RefreshTokenRepositoryTest {
     // then
     assertThat(reused).isEqualTo(RotationResult.REUSED);
     assertThat(afterRevoke).isEqualTo(RotationResult.REJECTED);
+  }
+
+  @Test
+  @DisplayName("로그인 세션을 무효화하면 무효화 여부가 조회되고 해당 세션의 토큰은 교체할 수 없다")
+  void revokesFamily() {
+    // given
+    repository.save("token", MEMBER_ID, FAMILY);
+    boolean revokedBefore = repository.isFamilyRevoked(FAMILY);
+
+    // when
+    repository.revokeFamily(FAMILY);
+
+    // then
+    assertThat(revokedBefore).isFalse();
+    assertThat(repository.isFamilyRevoked(FAMILY)).isTrue();
+    assertThat(repository.isFamilyRevoked("other-family")).isFalse();
+    assertThat(repository.rotate("token", "new", FAMILY)).isEqualTo(RotationResult.REJECTED);
+    assertThat(repository.findByTokenHash("new")).isEmpty();
+    assertThat(redisTemplate.getExpire(FAMILY_KEY_PREFIX + FAMILY, TimeUnit.MILLISECONDS))
+        .isBetween(VALIDITY.minusMinutes(1).toMillis(), VALIDITY.toMillis());
   }
 
   private static long expireTimeMillis(String tokenHash) {
