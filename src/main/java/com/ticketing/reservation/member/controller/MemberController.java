@@ -1,5 +1,6 @@
 package com.ticketing.reservation.member.controller;
 
+import com.ticketing.reservation.global.web.ApiPaths;
 import com.ticketing.reservation.member.dto.EmailAvailabilityResponse;
 import com.ticketing.reservation.member.dto.SignUpRequest;
 import com.ticketing.reservation.member.dto.SignUpResponse;
@@ -17,7 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/members")
+@RequestMapping(ApiPaths.V1 + "/members")
 public class MemberController {
 
   private final MemberService memberService;

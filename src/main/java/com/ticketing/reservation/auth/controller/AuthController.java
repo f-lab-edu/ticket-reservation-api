@@ -5,6 +5,7 @@ import com.ticketing.reservation.auth.dto.RefreshTokenRequest;
 import com.ticketing.reservation.auth.dto.TokenResponse;
 import com.ticketing.reservation.auth.service.AuthService;
 import com.ticketing.reservation.auth.token.AccessTokenProvider;
+import com.ticketing.reservation.global.web.ApiPaths;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping(ApiPaths.V1 + "/auth")
 public class AuthController {
 
   private final AuthService authService;
