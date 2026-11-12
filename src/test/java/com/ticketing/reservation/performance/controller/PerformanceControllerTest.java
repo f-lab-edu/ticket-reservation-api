@@ -20,6 +20,7 @@ import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.domain.MemberRole;
 import com.ticketing.reservation.performance.domain.Performance;
+import com.ticketing.reservation.performance.domain.SalePeriod;
 import com.ticketing.reservation.performance.dto.PerformanceRequest;
 import com.ticketing.reservation.performance.service.PerformanceService;
 import java.time.Clock;
@@ -88,8 +89,9 @@ class PerformanceControllerTest {
             LocalDateTime.parse("2026-12-20T19:00:00"),
             50_000,
             100,
-            LocalDateTime.parse("2026-12-01T10:00:00"),
-            LocalDateTime.parse("2026-12-19T23:59:59"),
+            new SalePeriod(
+                LocalDateTime.parse("2026-12-01T10:00:00"),
+                LocalDateTime.parse("2026-12-19T23:59:59")),
             LocalDateTime.parse("2026-11-12T12:00:00"));
     ReflectionTestUtils.setField(performance, "id", 1L);
     given(performanceService.register(any(PerformanceRequest.class))).willReturn(performance);

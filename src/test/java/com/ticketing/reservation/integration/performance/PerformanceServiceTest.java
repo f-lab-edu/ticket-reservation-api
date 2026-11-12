@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.performance.domain.Performance;
+import com.ticketing.reservation.performance.domain.SalePeriod;
 import com.ticketing.reservation.performance.dto.PerformanceRequest;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import com.ticketing.reservation.performance.service.PerformanceService;
@@ -51,7 +52,6 @@ class PerformanceServiceTest {
     assertThat(saved.getPerformanceAt()).isEqualTo(performanceAt);
     assertThat(saved.getPrice()).isEqualTo(50_000);
     assertThat(saved.getTotalQuantity()).isEqualTo(100);
-    assertThat(saved.getSaleStartAt()).isEqualTo(saleStartAt);
-    assertThat(saved.getSaleEndAt()).isEqualTo(saleEndAt);
+    assertThat(saved.getSalePeriod()).isEqualTo(new SalePeriod(saleStartAt, saleEndAt));
   }
 }

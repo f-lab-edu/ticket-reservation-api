@@ -2,6 +2,7 @@ package com.ticketing.reservation.performance.domain;
 
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -30,9 +31,7 @@ public class Performance {
 
   private int remainingQuantity;
 
-  private LocalDateTime saleStartAt;
-
-  private LocalDateTime saleEndAt;
+  @Embedded private SalePeriod salePeriod;
 
   protected Performance() {}
 
@@ -42,16 +41,14 @@ public class Performance {
       LocalDateTime performanceAt,
       int price,
       int totalQuantity,
-      LocalDateTime saleStartAt,
-      LocalDateTime saleEndAt) {
+      SalePeriod salePeriod) {
     this.title = title;
     this.venue = venue;
     this.performanceAt = performanceAt;
     this.price = price;
     this.totalQuantity = totalQuantity;
     this.remainingQuantity = totalQuantity;
-    this.saleStartAt = saleStartAt;
-    this.saleEndAt = saleEndAt;
+    this.salePeriod = salePeriod;
   }
 
   public static Performance create(
@@ -60,20 +57,15 @@ public class Performance {
       LocalDateTime performanceAt,
       int price,
       int totalQuantity,
-      LocalDateTime saleStartAt,
-      LocalDateTime saleEndAt,
+      SalePeriod salePeriod,
       LocalDateTime now) {
-    if (!saleStartAt.isAfter(now)) {
+    if (!salePeriod.saleStartAt().isAfter(now)) {
       throw new BusinessException(ErrorCode.INVALID_SALE_START_AT);
     }
-    if (!saleEndAt.isAfter(saleStartAt)) {
-      throw new BusinessException(ErrorCode.INVALID_SALE_PERIOD);
-    }
-    if (!saleEndAt.isBefore(performanceAt)) {
+    if (!salePeriod.saleEndAt().isBefore(performanceAt)) {
       throw new BusinessException(ErrorCode.SALE_END_AFTER_PERFORMANCE);
     }
-    return new Performance(
-        title, venue, performanceAt, price, totalQuantity, saleStartAt, saleEndAt);
+    return new Performance(title, venue, performanceAt, price, totalQuantity, salePeriod);
   }
 
   public Long getId() {
@@ -104,11 +96,7 @@ public class Performance {
     return remainingQuantity;
   }
 
-  public LocalDateTime getSaleStartAt() {
-    return saleStartAt;
-  }
-
-  public LocalDateTime getSaleEndAt() {
-    return saleEndAt;
+  public SalePeriod getSalePeriod() {
+    return salePeriod;
   }
 }

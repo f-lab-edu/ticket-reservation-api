@@ -1,6 +1,7 @@
 package com.ticketing.reservation.performance.service;
 
 import com.ticketing.reservation.performance.domain.Performance;
+import com.ticketing.reservation.performance.domain.SalePeriod;
 import com.ticketing.reservation.performance.dto.PerformanceRequest;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import java.time.Clock;
@@ -28,8 +29,7 @@ public class PerformanceService {
             request.performanceAt(),
             request.price(),
             request.totalQuantity(),
-            request.saleStartAt(),
-            request.saleEndAt(),
+            new SalePeriod(request.saleStartAt(), request.saleEndAt()),
             LocalDateTime.now(clock));
     return performanceRepository.save(performance);
   }

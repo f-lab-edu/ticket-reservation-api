@@ -44,20 +44,6 @@ class PerformanceTest {
   }
 
   @ParameterizedTest
-  @DisplayName("판매 종료 일시가 판매 시작 일시와 같거나 빠르면 거절한다")
-  @ValueSource(longs = {0, 1})
-  void rejectsSaleEndAtOrBeforeSaleStart(long minutesBeforeSaleStart) {
-    // given
-    LocalDateTime saleEndAt = SALE_START_AT.minusMinutes(minutesBeforeSaleStart);
-
-    // when
-    Throwable thrown = catchThrowable(() -> create(PERFORMANCE_AT, SALE_START_AT, saleEndAt));
-
-    // then
-    assertErrorCode(thrown, ErrorCode.INVALID_SALE_PERIOD);
-  }
-
-  @ParameterizedTest
   @DisplayName("판매 종료 일시가 공연 일시와 같거나 늦으면 거절한다")
   @ValueSource(longs = {0, 1})
   void rejectsSaleEndAtOrAfterPerformance(long minutesAfterPerformance) {
@@ -73,7 +59,8 @@ class PerformanceTest {
 
   private Performance create(
       LocalDateTime performanceAt, LocalDateTime saleStartAt, LocalDateTime saleEndAt) {
-    return Performance.create("공연", "공연장", performanceAt, 50_000, 100, saleStartAt, saleEndAt, NOW);
+    return Performance.create(
+        "공연", "공연장", performanceAt, 50_000, 100, new SalePeriod(saleStartAt, saleEndAt), NOW);
   }
 
   private void assertErrorCode(Throwable thrown, ErrorCode errorCode) {

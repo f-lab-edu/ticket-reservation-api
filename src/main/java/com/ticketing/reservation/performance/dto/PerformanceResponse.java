@@ -23,7 +23,7 @@ public record PerformanceResponse(
         performance.getPrice(),
         performance.getTotalQuantity(),
         performance.getRemainingQuantity(),
-        performance.getSaleStartAt(),
-        performance.getSaleEndAt());
+        performance.getSalePeriod().saleStartAt(),
+        performance.getSalePeriod().saleEndAt());
   }
 }
