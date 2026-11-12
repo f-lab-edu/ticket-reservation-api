@@ -41,6 +41,7 @@
 | `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호가 올바르지 않습니다. |
 | `UNAUTHORIZED` | 401 | 인증 정보가 없거나 유효하지 않습니다. |
 | `INVALID_REFRESH_TOKEN` | 401 | 리프레시 토큰이 유효하지 않습니다. |
+| `FORBIDDEN` | 403 | 요청한 작업을 수행할 권한이 없습니다. |
 | `AUTH_STORE_UNAVAILABLE` | 503 | 인증 서비스를 일시적으로 사용할 수 없습니다. |
 
 ### 1.3. 인증
@@ -57,8 +58,10 @@ Authorization: Bearer {accessToken}
 |---|---|---|---|
 | Bearer 토큰을 보내지 않음 (`Authorization` 헤더가 없거나 Basic 등 다른 인증 방식) | 401 | `UNAUTHORIZED` | `Bearer` |
 | 액세스 토큰이 만료됐거나, 무효화됐거나, 서명·형식이 올바르지 않음 | 401 | `UNAUTHORIZED` | `Bearer error="invalid_token", error_description="...", error_uri="..."` |
+| 인증은 됐지만 API에 필요한 권한이 없음 (예: 관리자 API를 일반 회원이 요청) | 403 | `FORBIDDEN` | 없음 |
 | 로그인 세션 무효화 여부를 확인할 수 없음 (토큰 저장소 장애) | 503 | `AUTH_STORE_UNAVAILABLE` | 없음 |
 
+- 인증이 필요한 API는 모두 위 표의 오류를 반환할 수 있습니다. API별 오류 표에는 이 오류를 반복해 적지 않고, 해당 API에서만 발생하는 오류만 적습니다.
 - 액세스 토큰 만료는 60초의 기본 허용 오차를 두고 판정합니다. 만료 시각(`exp`)이 지난 뒤 60초 이내의 토큰은 아직 유효한 것으로 처리합니다.
 - 인증이 필요 없는 API는 `Authorization` 헤더를 확인하지 않습니다. 만료된 토큰을 붙여 호출해도 거절되지 않습니다.
 
@@ -223,7 +226,6 @@ Authorization: Bearer {accessToken}
 
 | code | status | 상황 |
 |---|---|---|
-| `UNAUTHORIZED` | 401 | 유효하지 않은 액세스 토큰 |
 | `AUTH_STORE_UNAVAILABLE` | 503 | 토큰 저장소 장애 |
 
 #### 비고

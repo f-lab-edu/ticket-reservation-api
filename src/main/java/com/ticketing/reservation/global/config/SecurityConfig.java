@@ -7,6 +7,7 @@ import com.ticketing.reservation.auth.token.AccessTokenProvider;
 import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.global.error.ProblemDetailWriter;
 import com.ticketing.reservation.global.web.ApiPaths;
+import com.ticketing.reservation.member.domain.MemberRole;
 import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,6 +40,9 @@ public class SecurityConfig {
           PATH.matcher(HttpMethod.POST, ApiPaths.V1 + "/auth/login"),
           PATH.matcher(HttpMethod.POST, ApiPaths.V1 + "/auth/refresh"));
 
+  private static final RequestMatcher ADMIN_ENDPOINTS =
+      PATH.matcher(HttpMethod.POST, ApiPaths.V1 + "/performances");
+
   @Bean
   public SecurityFilterChain securityFilterChain(
       HttpSecurity http, ObjectMapper objectMapper, RefreshTokenRepository refreshTokenRepository)
@@ -58,6 +62,8 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(PUBLIC_ENDPOINTS)
                     .permitAll()
+                    .requestMatchers(ADMIN_ENDPOINTS)
+                    .hasRole(MemberRole.ADMIN.name())
                     .anyRequest()
                     .authenticated())
         .oauth2ResourceServer(
@@ -69,7 +75,13 @@ public class SecurityConfig {
         .addFilterAfter(
             new RevokedSessionFilter(refreshTokenRepository, entryPoint, problemDetailWriter),
             BearerTokenAuthenticationFilter.class)
-        .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(entryPoint))
+        .exceptionHandling(
+            exceptions ->
+                exceptions
+                    .authenticationEntryPoint(entryPoint)
+                    .accessDeniedHandler(
+                        (request, response, accessDeniedException) ->
+                            problemDetailWriter.write(request, response, ErrorCode.FORBIDDEN)))
         .build();
   }
 

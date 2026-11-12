@@ -14,6 +14,7 @@ import com.ticketing.reservation.auth.token.AccessTokenProvider;
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.member.domain.Member;
+import com.ticketing.reservation.member.domain.MemberRole;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -49,6 +50,7 @@ class SecurityConfigTest {
 
   private static final String PROTECTED_PATH = "/test/protected";
   private static final String PUBLIC_PATH = "/api/v1/auth/login";
+  private static final String ADMIN_PATH = "/api/v1/performances";
   private static final Duration DEFAULT_CLOCK_SKEW = Duration.ofSeconds(60);
   private static final String FAMILY_ID = "family";
 
@@ -173,6 +175,38 @@ class SecurityConfigTest {
         .andExpect(jsonPath("$.code").value("AUTH_STORE_UNAVAILABLE"));
   }
 
+  @Test
+  @DisplayName("관리자 API를 일반 회원이 요청하면 403을 반환한다")
+  void returnsForbiddenWhenUserRequestsAdminEndpoint() throws Exception {
+    // given
+    String token = providerAt(Instant.now()).issue(member(7L), FAMILY_ID);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(post(ADMIN_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isForbidden())
+        .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.instance").value(ADMIN_PATH))
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
+  @DisplayName("관리자 API를 관리자가 요청하면 허용한다")
+  void allowsAdminToRequestAdminEndpoint() throws Exception {
+    // given
+    String token = providerAt(Instant.now()).issue(admin(1L), FAMILY_ID);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(post(ADMIN_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result.andExpect(status().isOk());
+  }
+
   private ResultMatcher unauthorizedProblemDetail() {
     return result -> {
       status().isUnauthorized().match(result);
@@ -202,6 +236,13 @@ class SecurityConfigTest {
     return member;
   }
 
+  private Member admin(Long id) {
+    Member member = Member.create("admin@example.com", "{bcrypt}hash");
+    ReflectionTestUtils.setField(member, "role", MemberRole.ADMIN);
+    ReflectionTestUtils.setField(member, "id", id);
+    return member;
+  }
+
   @RestController
   static class TestController {
 
@@ -214,9 +255,9 @@ class SecurityConfigTest {
           authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList());
     }
 
-    @PostMapping(PUBLIC_PATH)
-    void publicEndpoint() {
-      // 보안 필터 통과 확인용 빈 핸들러
+    @PostMapping({PUBLIC_PATH, ADMIN_PATH})
+    void postEndpoint() {
+      // 보안 필터(인증·권한 검사) 통과 확인용 빈 핸들러
     }
   }
 }
