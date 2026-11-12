@@ -325,3 +325,50 @@ Authorization: Bearer {accessToken}
 |---|---|---|
 | - | 400 | `performanceId`가 숫자가 아님 |
 | `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |
+
+### 4.3. 공연 목록 조회
+
+`GET /api/v1/performances` · 인증 불필요 · 기능정의서 4.5, 4.6
+
+#### 요청
+
+| 파라미터 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `available` | query | boolean | X | `true`면 예약 가능한 공연만 조회합니다(4.5). 생략하거나 `false`면 전체 공연을 조회합니다(4.6). |
+
+- 예약 가능한 공연: 판매 시작 일시 ≤ 현재 시각 < 판매 종료 일시이고 잔여 판매 수량이 1 이상인 공연
+- 정렬: 공연 일시 오름차순, 같으면 공연 식별자 오름차순
+- 페이징 없이 조건에 맞는 공연을 모두 반환합니다.
+
+#### 응답: `200 OK`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `performances` | array | 공연 목록. 조건에 맞는 공연이 없으면 빈 배열 |
+| `performances[].id` | number | 공연 식별자 |
+| `performances[].title` | string | 공연명 |
+| `performances[].venue` | string | 공연 장소 |
+| `performances[].performanceAt` | string | 공연 일시 |
+| `performances[].price` | number | 티켓 가격 |
+| `performances[].remainingQuantity` | number | 잔여 판매 수량 |
+
+```json
+{
+  "performances": [
+    {
+      "id": 1,
+      "title": "콘서트1",
+      "venue": "장소A",
+      "performanceAt": "2026-12-20T19:00:00",
+      "price": 50000,
+      "remainingQuantity": 100
+    }
+  ]
+}
+```
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | `available`이 `true`·`false`가 아님 |

@@ -27,6 +27,7 @@ import com.ticketing.reservation.performance.service.PerformanceService;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -199,6 +200,47 @@ class PerformanceControllerTest {
           .andExpect(status().isNotFound())
           .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
           .andExpect(jsonPath("$.code").value("PERFORMANCE_NOT_FOUND"));
+    }
+  }
+
+  @Nested
+  @DisplayName("공연 목록 조회")
+  class GetPerformances {
+
+    @Test
+    @DisplayName("조건 없이 조회하면 전체 공연 목록을 반환한다")
+    void returnsAllPerformancesByDefault() throws Exception {
+      // given
+      given(performanceService.getPerformances(false))
+          .willReturn(List.of(performance(1L), performance(2L)));
+
+      // when
+      ResultActions result = mockMvc.perform(get("/api/v1/performances"));
+
+      // then
+      result
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.performances.length()").value(2))
+          .andExpect(jsonPath("$.performances[0].id").value(1))
+          .andExpect(jsonPath("$.performances[0].title").value("공연"))
+          .andExpect(jsonPath("$.performances[0].venue").value("공연장"))
+          .andExpect(jsonPath("$.performances[0].performanceAt").value("2026-12-20T19:00:00"))
+          .andExpect(jsonPath("$.performances[0].price").value(50000))
+          .andExpect(jsonPath("$.performances[0].remainingQuantity").value(100));
+    }
+
+    @Test
+    @DisplayName("available이 true이면 예약 가능한 공연 목록을 조회한다")
+    void requestsAvailablePerformancesWhenAvailableIsTrue() throws Exception {
+      // given
+      given(performanceService.getPerformances(true)).willReturn(List.of(performance(1L)));
+
+      // when
+      ResultActions result =
+          mockMvc.perform(get("/api/v1/performances").param("available", "true"));
+
+      // then
+      result.andExpect(status().isOk()).andExpect(jsonPath("$.performances.length()").value(1));
     }
   }
 

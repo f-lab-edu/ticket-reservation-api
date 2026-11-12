@@ -8,6 +8,7 @@ import com.ticketing.reservation.performance.dto.PerformanceRequest;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,5 +42,13 @@ public class PerformanceService {
     return performanceRepository
         .findById(performanceId)
         .orElseThrow(() -> new BusinessException(ErrorCode.PERFORMANCE_NOT_FOUND));
+  }
+
+  @Transactional(readOnly = true)
+  public List<Performance> getPerformances(boolean available) {
+    if (available) {
+      return performanceRepository.findAvailable(LocalDateTime.now(clock));
+    }
+    return performanceRepository.findAllByOrderByPerformanceAtAscIdAsc();
   }
 }

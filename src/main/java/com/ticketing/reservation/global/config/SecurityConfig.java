@@ -39,6 +39,7 @@ public class SecurityConfig {
           PATH.matcher(HttpMethod.POST, ApiPaths.V1 + "/members"),
           PATH.matcher(HttpMethod.POST, ApiPaths.V1 + "/auth/login"),
           PATH.matcher(HttpMethod.POST, ApiPaths.V1 + "/auth/refresh"),
+          PATH.matcher(HttpMethod.GET, ApiPaths.V1 + "/performances"),
           PATH.matcher(HttpMethod.GET, ApiPaths.V1 + "/performances/{performanceId}"));
 
   private static final RequestMatcher ADMIN_ENDPOINTS =
