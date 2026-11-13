@@ -153,12 +153,15 @@ class PerformanceControllerTest {
         arguments("venue", " "),
         arguments("venue", "가".repeat(Performance.MAX_VENUE_LENGTH + 1)),
         arguments("performanceAt", null),
+        arguments("performanceAt", "2026-12-20T19:00:00.5"),
         arguments("price", null),
         arguments("price", -1),
         arguments("totalQuantity", null),
         arguments("totalQuantity", 0),
         arguments("saleStartAt", null),
-        arguments("saleEndAt", null));
+        arguments("saleStartAt", "2026-12-01T10:00:00.5"),
+        arguments("saleEndAt", null),
+        arguments("saleEndAt", "2026-12-19T18:00:00.5"));
   }
 
   private ResultActions register(Map<String, Object> body) throws Exception {
