@@ -371,4 +371,4 @@ Authorization: Bearer {accessToken}
 
 | code | status | 상황 |
 |---|---|---|
-| - | 400 | `available`이 `true`·`false`가 아님 |
+| - | 400 | `available`을 boolean으로 해석할 수 없음 |
