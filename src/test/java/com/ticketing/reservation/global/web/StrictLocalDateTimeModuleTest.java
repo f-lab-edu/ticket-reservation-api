@@ -44,7 +44,19 @@ class StrictLocalDateTimeModuleTest {
     assertThat(thrown).isInstanceOf(InvalidFormatException.class);
   }
 
+  @Test
+  @DisplayName("존재하지 않는 날짜의 LocalDateTime은 거절한다")
+  void rejectsNonExistentDate() {
+    // when
+    Throwable thrown =
+        catchThrowable(
+            () -> objectMapper.readValue("{\"at\":\"2026-02-30T10:00:00\"}", Formatted.class));
+
+    // then
+    assertThat(thrown).isInstanceOf(InvalidFormatException.class);
+  }
+
   private record Plain(LocalDateTime at) {}
 
-  private record Formatted(@JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime at) {}
+  private record Formatted(@JsonFormat(pattern = "uuuu-MM-dd'T'HH:mm:ss") LocalDateTime at) {}
 }

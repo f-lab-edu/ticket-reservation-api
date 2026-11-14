@@ -1,5 +1,6 @@
 package com.ticketing.reservation.global.web;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.BeanProperty;
@@ -20,6 +21,12 @@ public class StrictLocalDateTimeModule extends SimpleModule {
   public StrictLocalDateTimeModule() {
     addDeserializer(
         LocalDateTime.class, new StringOnlyDeserializer(LocalDateTimeDeserializer.INSTANCE));
+  }
+
+  @Override
+  public void setupModule(SetupContext context) {
+    super.setupModule(context);
+    context.configOverride(LocalDateTime.class).setFormat(JsonFormat.Value.forLeniency(false));
   }
 
   private static class StringOnlyDeserializer extends StdDeserializer<LocalDateTime>

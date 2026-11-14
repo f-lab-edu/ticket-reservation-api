@@ -18,5 +18,5 @@ public record PerformanceRequest(
     @NotNull @JsonFormat(pattern = DATE_TIME_PATTERN) LocalDateTime saleStartAt,
     @NotNull @JsonFormat(pattern = DATE_TIME_PATTERN) LocalDateTime saleEndAt) {
 
-  private static final String DATE_TIME_PATTERN = "yyyy-MM-dd'T'HH:mm:ss";
+  private static final String DATE_TIME_PATTERN = "uuuu-MM-dd'T'HH:mm:ss";
 }
