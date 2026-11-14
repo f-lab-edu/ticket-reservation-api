@@ -1,7 +1,10 @@
 package com.ticketing.reservation.integration.performance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
+import com.ticketing.reservation.global.error.BusinessException;
+import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.performance.domain.Performance;
 import com.ticketing.reservation.performance.domain.SalePeriod;
@@ -11,6 +14,7 @@ import com.ticketing.reservation.performance.service.PerformanceService;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,5 +57,45 @@ class PerformanceServiceTest {
     assertThat(saved.getPrice()).isEqualTo(50_000);
     assertThat(saved.getTotalQuantity()).isEqualTo(100);
     assertThat(saved.getSalePeriod()).isEqualTo(new SalePeriod(saleStartAt, saleEndAt));
+  }
+
+  @Test
+  @DisplayName("없는 공연을 조회하면 공연 없음 예외가 발생한다")
+  void throwsNotFoundWhenPerformanceDoesNotExist() {
+    // when
+    Throwable thrown = catchThrowable(() -> performanceService.getPerformance(Long.MAX_VALUE));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PERFORMANCE_NOT_FOUND));
+  }
+
+  @Test
+  @DisplayName("예약 가능한 공연만 조회하면 현재 시각 기준으로 판매 중인 공연을 반환한다")
+  void findsAvailablePerformancesBasedOnCurrentTime() {
+    // given
+    LocalDateTime now = LocalDateTime.now(clock);
+    Performance onSale = save("판매 중", now.minusDays(1), now.plusDays(1));
+    save("판매 예정", now.plusDays(1), now.plusDays(2));
+
+    // when
+    List<Performance> performances = performanceService.getPerformances(true);
+
+    // then
+    assertThat(performances).extracting(Performance::getId).containsExactly(onSale.getId());
+  }
+
+  private Performance save(String title, LocalDateTime saleStartAt, LocalDateTime saleEndAt) {
+    return performanceRepository.save(
+        Performance.create(
+            title,
+            "공연장",
+            saleEndAt.plusDays(1),
+            50_000,
+            100,
+            new SalePeriod(saleStartAt, saleEndAt),
+            saleStartAt.minusDays(1)));
   }
 }

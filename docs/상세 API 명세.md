@@ -46,6 +46,7 @@
 | `INVALID_SALE_START_AT` | 400 | 판매 시작 일시는 현재 시각보다 늦어야 합니다. |
 | `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시는 판매 시작 일시보다 늦어야 합니다. |
 | `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시는 공연 일시보다 빨라야 합니다. |
+| `PERFORMANCE_NOT_FOUND` | 404 | 공연을 찾을 수 없습니다. |
 
 ### 1.3. 인증
 
@@ -263,7 +264,7 @@ Authorization: Bearer {accessToken}
   "price": 50000,
   "totalQuantity": 100,
   "saleStartAt": "2026-12-01T10:00:00",
-  "saleEndAt": "2026-12-19T23:59:59"
+  "saleEndAt": "2026-12-19T18:00:00"
 }
 ```
 
@@ -291,7 +292,7 @@ Authorization: Bearer {accessToken}
   "totalQuantity": 100,
   "remainingQuantity": 100,
   "saleStartAt": "2026-12-01T10:00:00",
-  "saleEndAt": "2026-12-19T23:59:59"
+  "saleEndAt": "2026-12-19T18:00:00"
 }
 ```
 
@@ -303,3 +304,71 @@ Authorization: Bearer {accessToken}
 | `INVALID_SALE_START_AT` | 400 | 판매 시작 일시가 현재 시각과 같거나 빠름 |
 | `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시가 판매 시작 일시와 같거나 빠름 |
 | `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시가 공연 일시와 같거나 늦음 |
+
+### 4.2. 공연 상세 조회
+
+`GET /api/v1/performances/{performanceId}` · 인증 불필요 · 기능정의서 4.7
+
+#### 요청
+
+| 파라미터 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `performanceId` | path | number | O | 공연 식별자 |
+
+#### 응답: `200 OK`
+
+공연 등록 응답(4.1)과 같습니다.
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | `performanceId`가 숫자가 아님 |
+| `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |
+
+### 4.3. 공연 목록 조회
+
+`GET /api/v1/performances` · 인증 불필요 · 기능정의서 4.5, 4.6
+
+#### 요청
+
+| 파라미터 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `available` | query | boolean | X | `true`면 예약 가능한 공연만 조회합니다(4.5). 생략하거나 `false`면 전체 공연을 조회합니다(4.6). |
+
+- 예약 가능한 공연: 판매 시작 일시 ≤ 현재 시각 < 판매 종료 일시이고 잔여 판매 수량이 1 이상인 공연
+- 정렬: 공연 일시 오름차순, 같으면 공연 식별자 오름차순
+- 페이징 없이 조건에 맞는 공연을 모두 반환합니다.
+
+#### 응답: `200 OK`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `performances` | array | 공연 목록. 조건에 맞는 공연이 없으면 빈 배열 |
+| `performances[].id` | number | 공연 식별자 |
+| `performances[].title` | string | 공연명 |
+| `performances[].venue` | string | 공연 장소 |
+| `performances[].performanceAt` | string | 공연 일시 |
+| `performances[].price` | number | 티켓 가격 |
+| `performances[].remainingQuantity` | number | 잔여 판매 수량 |
+
+```json
+{
+  "performances": [
+    {
+      "id": 1,
+      "title": "콘서트1",
+      "venue": "장소A",
+      "performanceAt": "2026-12-20T19:00:00",
+      "price": 50000,
+      "remainingQuantity": 100
+    }
+  ]
+}
+```
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | `available`을 boolean으로 해석할 수 없음 |
