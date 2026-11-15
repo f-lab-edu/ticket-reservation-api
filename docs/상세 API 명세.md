@@ -336,6 +336,14 @@ Authorization: Bearer {accessToken}
 |---|---|---|---|---|
 | `available` | query | boolean | X | `true`면 예약 가능한 공연만 조회합니다(4.5). 생략하거나 `false`면 전체 공연을 조회합니다(4.6). |
 
+`available`은 아래 값만 허용합니다. 대소문자는 구분하지 않고, 값 앞뒤의 공백은 무시합니다.
+
+| 입력 | 해석 |
+|---|---|
+| `true`, `on`, `yes`, `1` | `true` |
+| `false`, `off`, `no`, `0` | `false` |
+| 생략, `?available`, `?available=` | `false` |
+
 - 예약 가능한 공연: 판매 시작 일시 ≤ 현재 시각 < 판매 종료 일시이고 잔여 판매 수량이 1 이상인 공연
 - 정렬: 공연 일시 오름차순, 같으면 공연 식별자 오름차순
 - 페이징 없이 조건에 맞는 공연을 모두 반환합니다.
@@ -371,4 +379,4 @@ Authorization: Bearer {accessToken}
 
 | code | status | 상황 |
 |---|---|---|
-| - | 400 | `available`을 boolean으로 해석할 수 없음 |
+| - | 400 | `available`이 요청 표에 없는 값 또는 공백만 있는 값 |
