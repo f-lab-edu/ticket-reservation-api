@@ -17,7 +17,7 @@
 | 1 | 토큰 재발급 | POST | `/auth/refresh` | Body: 리프레시 토큰 | 새 액세스·리프레시 토큰 및 만료 정보 | 불필요 |
 | 1 | 로그아웃 | POST | `/auth/logout` | 없음(액세스 토큰으로 로그인 세션 식별) | 본문 없음 | 회원 |
 | 2 | 공연 등록 | POST | `/performances` | Body: 공연명, 공연 일시, 판매 기간, 판매 수량, 가격 등 | 생성된 공연 정보 | 관리자 |
-| 2 | 공연 목록 조회 | GET | `/performances` | Query: `available` (선택) | 공연 목록(공연명, 공연 일시, 판매 기간, 가격, 잔여 수량 등) | 불필요 |
+| 2 | 공연 목록 조회 | GET | `/performances` | Query: `available` (선택) | 공연 목록(공연명, 공연 장소, 공연 일시, 가격, 잔여 수량) | 불필요 |
 | 2 | 공연 상세 조회 | GET | `/performances/{performanceId}` | Path: 공연 식별자 | 공연 상세 정보 | 불필요 |
 | 2 | 공연 정보 수정 | PUT | `/performances/{performanceId}` | Path: 공연 식별자; Body: 수정할 공연의 전체 정보 | 수정된 공연 정보 | 관리자 |
 | 3 | 예약 신청 | POST | `/reservations` | Body: 공연 식별자, 예약 수량 | 예약 정보(예약 번호, 상태, 수량, 결제 기한, 결제 금액 등) | 회원 |
