@@ -51,6 +51,22 @@ public class PerformanceService {
     return new PerformanceDetail(performance, stock);
   }
 
+  @Transactional
+  public PerformanceDetail update(Long performanceId, PerformanceRequest request) {
+    Performance performance = findPerformance(performanceId);
+    PerformanceStock stock = findStock(performanceId);
+    performance.update(
+        request.title(),
+        request.venue(),
+        request.performanceAt(),
+        request.price(),
+        new SalePeriod(request.saleStartAt(), request.saleEndAt()),
+        stock.hasReservation(),
+        LocalDateTime.now(clock));
+    stock.changeTotalQuantity(request.totalQuantity());
+    return new PerformanceDetail(performance, stock);
+  }
+
   @Transactional(readOnly = true)
   public PerformanceDetail getPerformance(Long performanceId) {
     return new PerformanceDetail(findPerformance(performanceId), findStock(performanceId));

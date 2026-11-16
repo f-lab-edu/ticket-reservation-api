@@ -1,8 +1,10 @@
 package com.ticketing.reservation.global.config;
 
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -20,12 +22,17 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -42,6 +49,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @WebMvcTest(SecurityConfigTest.TestController.class)
@@ -51,6 +59,7 @@ class SecurityConfigTest {
   private static final String PROTECTED_PATH = "/test/protected";
   private static final String PUBLIC_PATH = "/api/v1/auth/login";
   private static final String ADMIN_PATH = "/api/v1/performances";
+  private static final String ADMIN_UPDATE_PATH = ADMIN_PATH + "/1";
   private static final Duration DEFAULT_CLOCK_SKEW = Duration.ofSeconds(60);
   private static final String FAMILY_ID = "family";
 
@@ -175,36 +184,44 @@ class SecurityConfigTest {
         .andExpect(jsonPath("$.code").value("AUTH_STORE_UNAVAILABLE"));
   }
 
-  @Test
+  @ParameterizedTest(name = "{0} {1}")
   @DisplayName("관리자 API를 일반 회원이 요청하면 403을 반환한다")
-  void returnsForbiddenWhenUserRequestsAdminEndpoint() throws Exception {
+  @MethodSource("adminEndpoints")
+  void returnsForbiddenWhenUserRequestsAdminEndpoint(HttpMethod method, String path)
+      throws Exception {
     // given
     String token = providerAt(Instant.now()).issue(member(7L), FAMILY_ID);
 
     // when
     ResultActions result =
-        mockMvc.perform(post(ADMIN_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+        mockMvc.perform(request(method, path).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
 
     // then
     result
         .andExpect(status().isForbidden())
         .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-        .andExpect(jsonPath("$.instance").value(ADMIN_PATH))
+        .andExpect(jsonPath("$.instance").value(path))
         .andExpect(jsonPath("$.code").value("FORBIDDEN"));
   }
 
-  @Test
+  @ParameterizedTest(name = "{0} {1}")
   @DisplayName("관리자 API를 관리자가 요청하면 허용한다")
-  void allowsAdminToRequestAdminEndpoint() throws Exception {
+  @MethodSource("adminEndpoints")
+  void allowsAdminToRequestAdminEndpoint(HttpMethod method, String path) throws Exception {
     // given
     String token = providerAt(Instant.now()).issue(admin(1L), FAMILY_ID);
 
     // when
     ResultActions result =
-        mockMvc.perform(post(ADMIN_PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+        mockMvc.perform(request(method, path).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
 
     // then
     result.andExpect(status().isOk());
+  }
+
+  static Stream<Arguments> adminEndpoints() {
+    return Stream.of(
+        arguments(HttpMethod.POST, ADMIN_PATH), arguments(HttpMethod.PUT, ADMIN_UPDATE_PATH));
   }
 
   private ResultMatcher unauthorizedProblemDetail() {
@@ -257,6 +274,11 @@ class SecurityConfigTest {
 
     @PostMapping({PUBLIC_PATH, ADMIN_PATH})
     void postEndpoint() {
+      // 보안 필터(인증·권한 검사) 통과 확인용 빈 핸들러
+    }
+
+    @PutMapping(ADMIN_UPDATE_PATH)
+    void putEndpoint() {
       // 보안 필터(인증·권한 검사) 통과 확인용 빈 핸들러
     }
   }

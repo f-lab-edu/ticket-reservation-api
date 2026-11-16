@@ -1,5 +1,7 @@
 package com.ticketing.reservation.performance.domain;
 
+import com.ticketing.reservation.global.error.BusinessException;
+import com.ticketing.reservation.global.error.ErrorCode;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 
@@ -21,6 +23,17 @@ public class PerformanceStock {
 
   public static PerformanceStock create(Long performanceId, int totalQuantity) {
     return new PerformanceStock(performanceId, totalQuantity);
+  }
+
+  public void changeTotalQuantity(int totalQuantity) {
+    if (totalQuantity < reservedQuantity) {
+      throw new BusinessException(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED);
+    }
+    this.totalQuantity = totalQuantity;
+  }
+
+  public boolean hasReservation() {
+    return reservedQuantity > 0;
   }
 
   public Long getPerformanceId() {

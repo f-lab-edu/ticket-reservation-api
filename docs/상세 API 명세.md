@@ -46,7 +46,12 @@
 | `INVALID_SALE_START_AT` | 400 | 판매 시작 일시는 현재 시각보다 늦어야 합니다. |
 | `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시는 판매 시작 일시보다 늦어야 합니다. |
 | `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시는 공연 일시보다 빨라야 합니다. |
+| `INVALID_SALE_END_AT` | 400 | 판매 종료 일시는 현재 시각보다 늦어야 합니다. |
+| `INVALID_PERFORMANCE_AT` | 400 | 공연 일시는 현재 시각보다 늦어야 합니다. |
 | `PERFORMANCE_NOT_FOUND` | 404 | 공연을 찾을 수 없습니다. |
+| `SCHEDULE_CHANGE_NOT_ALLOWED` | 409 | 예약이 있는 공연은 공연 일시와 판매 시작 일시를 변경할 수 없습니다. |
+| `PERFORMANCE_ALREADY_STARTED` | 409 | 공연 일시가 지난 공연은 수정할 수 없습니다. |
+| `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량은 예약된 수량보다 적을 수 없습니다. |
 
 ### 1.3. 인증
 
@@ -301,9 +306,9 @@ Authorization: Bearer {accessToken}
 | code | status | 상황 |
 |---|---|---|
 | - | 400 | 요청값이 필수 여부·형식·조건을 만족하지 않음 |
-| `INVALID_SALE_START_AT` | 400 | 판매 시작 일시가 현재 시각과 같거나 빠름 |
-| `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시가 판매 시작 일시와 같거나 빠름 |
-| `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시가 공연 일시와 같거나 늦음 |
+| `INVALID_SALE_START_AT` | 400 | 판매 시작 일시 ≤ 현재 시각 |
+| `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시 ≤ 판매 시작 일시 |
+| `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시 ≥ 공연 일시 |
 
 ### 4.2. 공연 상세 조회
 
@@ -380,3 +385,36 @@ Authorization: Bearer {accessToken}
 | code | status | 상황 |
 |---|---|---|
 | - | 400 | `available`이 요청 표에 없는 값 또는 공백만 있는 값 |
+
+### 4.4. 공연 정보 수정
+
+`PUT /api/v1/performances/{performanceId}` · 인증 필요(관리자) · 기능정의서 4.8
+
+#### 요청
+
+| 필드 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `performanceId` | path | number | O | 공연 식별자 |
+
+본문은 공연 등록 요청(4.1)과 같습니다. 바꾸지 않는 항목도 기존 값으로 모두 보냅니다.
+
+- 공연 일시, 판매 시작 일시, 판매 종료 일시는 기존 값과 다를 때만 현재 시각과 비교합니다(4.8.1.2). 이미 판매가 시작된 공연도 판매 시작 일시를 그대로 보내면 수정할 수 있습니다.
+
+#### 응답: `200 OK`
+
+공연 등록 응답(4.1)과 같습니다. 단, `remainingQuantity`는 수정한 총 판매 수량에서 예약 수량을 뺀 값입니다.
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | 요청값이 필수 여부·형식·조건을 만족하지 않음, `performanceId`가 숫자가 아님 |
+| `INVALID_SALE_START_AT` | 400 | 판매 시작 일시 ≤ 현재 시각 |
+| `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시 ≤ 판매 시작 일시 |
+| `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시 ≥ 공연 일시 |
+| `INVALID_SALE_END_AT` | 400 | 판매 종료 일시 ≤ 현재 시각 |
+| `INVALID_PERFORMANCE_AT` | 400 | 공연 일시 ≤ 현재 시각 |
+| `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |
+| `SCHEDULE_CHANGE_NOT_ALLOWED` | 409 | 예약이 있는데 공연 일시 또는 판매 시작 일시를 바꿈 |
+| `PERFORMANCE_ALREADY_STARTED` | 409 | 공연이 이미 시작됨 |
+| `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량이 이미 예약된 수량보다 적음 |

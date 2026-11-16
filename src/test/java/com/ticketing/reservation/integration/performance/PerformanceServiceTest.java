@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -66,6 +67,91 @@ class PerformanceServiceTest {
     PerformanceStock stock = stockRepository.findById(performanceId).orElseThrow();
     assertThat(stock.getTotalQuantity()).isEqualTo(100);
     assertThat(stock.getRemainingQuantity()).isEqualTo(100);
+  }
+
+  @Test
+  @DisplayName("공연 정보와 재고를 수정한다")
+  void updatesPerformanceAndStock() {
+    // given
+    LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+    Performance performance = save("공연", now.plusDays(1), now.plusDays(10), 100);
+    LocalDateTime performanceAt = now.plusDays(20);
+    LocalDateTime saleStartAt = now.plusDays(2);
+    LocalDateTime saleEndAt = now.plusDays(15);
+    PerformanceRequest request =
+        new PerformanceRequest("새 공연", "새 공연장", performanceAt, 60_000, 120, saleStartAt, saleEndAt);
+
+    // when
+    performanceService.update(performance.getId(), request);
+
+    // then
+    Performance saved = performanceRepository.findById(performance.getId()).orElseThrow();
+    assertThat(saved.getTitle()).isEqualTo("새 공연");
+    assertThat(saved.getVenue()).isEqualTo("새 공연장");
+    assertThat(saved.getPerformanceAt()).isEqualTo(performanceAt);
+    assertThat(saved.getPrice()).isEqualTo(60_000);
+    assertThat(saved.getSalePeriod()).isEqualTo(new SalePeriod(saleStartAt, saleEndAt));
+    PerformanceStock stock = stockRepository.findById(performance.getId()).orElseThrow();
+    assertThat(stock.getTotalQuantity()).isEqualTo(120);
+    assertThat(stock.getRemainingQuantity()).isEqualTo(120);
+  }
+
+  @Test
+  @DisplayName("총 판매 수량 검증에 실패하면 공연 정보도 바뀌지 않는다")
+  void keepsPerformanceWhenStockUpdateFails() {
+    // given
+    LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+    Performance performance = save("공연", now.plusDays(1), now.plusDays(10), 100);
+    reserve(performance, 30);
+    PerformanceRequest request =
+        new PerformanceRequest(
+            "새 공연",
+            "공연장",
+            performance.getPerformanceAt(),
+            50_000,
+            29,
+            now.plusDays(1),
+            now.plusDays(10));
+
+    // when
+    Throwable thrown =
+        catchThrowable(() -> performanceService.update(performance.getId(), request));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED));
+    Performance saved = performanceRepository.findById(performance.getId()).orElseThrow();
+    assertThat(saved.getTitle()).isEqualTo("공연");
+  }
+
+  @Test
+  @DisplayName("공연 일시가 지난 공연이면 총 판매 수량 오류보다 공연 시작 오류를 먼저 반환한다")
+  void rejectsStartedPerformanceBeforeQuantityCheck() {
+    // given
+    LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+    Performance performance = save("공연", now.minusDays(3), now.minusDays(2), 100);
+    reserve(performance, 30);
+    PerformanceRequest request =
+        new PerformanceRequest(
+            "공연",
+            "공연장",
+            performance.getPerformanceAt(),
+            50_000,
+            29,
+            now.minusDays(3),
+            now.minusDays(2));
+
+    // when
+    Throwable thrown =
+        catchThrowable(() -> performanceService.update(performance.getId(), request));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PERFORMANCE_ALREADY_STARTED));
   }
 
   @Test
@@ -112,5 +198,11 @@ class PerformanceServiceTest {
                 saleStartAt.minusDays(1)));
     stockRepository.save(PerformanceStock.create(performance.getId(), totalQuantity));
     return performance;
+  }
+
+  private void reserve(Performance performance, int reservedQuantity) {
+    PerformanceStock stock = stockRepository.findById(performance.getId()).orElseThrow();
+    ReflectionTestUtils.setField(stock, "reservedQuantity", reservedQuantity);
+    stockRepository.save(stock);
   }
 }
