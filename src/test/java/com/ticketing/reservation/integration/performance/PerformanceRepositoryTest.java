@@ -1,6 +1,8 @@
 package com.ticketing.reservation.integration.performance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Named.named;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.performance.domain.Performance;
@@ -10,15 +12,21 @@ import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import com.ticketing.reservation.performance.repository.PerformanceStockRepository;
 import java.time.LocalDateTime;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
+import java.util.function.Function;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.util.ReflectionTestUtils;
 
-@SpringBootTest
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(TestcontainersConfiguration.class)
 class PerformanceRepositoryTest {
 
@@ -27,12 +35,6 @@ class PerformanceRepositoryTest {
 
   @Autowired private PerformanceRepository performanceRepository;
   @Autowired private PerformanceStockRepository stockRepository;
-
-  @AfterEach
-  void tearDown() {
-    stockRepository.deleteAllInBatch();
-    performanceRepository.deleteAllInBatch();
-  }
 
   @Test
   @DisplayName("예약 가능한 공연은 판매 기간 안이고 잔여 수량이 있는 공연만 조회한다")
@@ -64,21 +66,30 @@ class PerformanceRepositoryTest {
     assertThat(performances).extracting(Performance::getTitle).containsExactly("지금 판매 시작");
   }
 
-  @Test
-  @DisplayName("전체 공연은 공연 일시 순으로, 같으면 등록 순으로 조회한다")
-  void findsAllOrderedByPerformanceAtAndId() {
+  @ParameterizedTest(name = "{0}")
+  @DisplayName("공연 목록은 공연 일시 순으로, 같으면 등록 순으로 조회한다")
+  @MethodSource("listQueries")
+  void findsOrderedByPerformanceAtAndId(Function<PerformanceRepository, List<Performance>> query) {
     // given
     save("다음 날 공연", PERFORMANCE_AT.plusDays(1));
     save("첫날 공연 1", PERFORMANCE_AT);
     save("첫날 공연 2", PERFORMANCE_AT);
 
     // when
-    List<Performance> performances = performanceRepository.findAllByOrderByPerformanceAtAscIdAsc();
+    List<Performance> performances = query.apply(performanceRepository);
 
     // then
     assertThat(performances)
         .extracting(Performance::getTitle)
         .containsExactly("첫날 공연 1", "첫날 공연 2", "다음 날 공연");
+  }
+
+  static Stream<Arguments> listQueries() {
+    Function<PerformanceRepository, List<Performance>> available =
+        repository -> repository.findAvailable(NOW);
+    Function<PerformanceRepository, List<Performance>> all =
+        PerformanceRepository::findAllByOrderByPerformanceAtAscIdAsc;
+    return Stream.of(arguments(named("예약 가능한 공연", available)), arguments(named("전체 공연", all)));
   }
 
   private void save(String title, LocalDateTime performanceAt) {
