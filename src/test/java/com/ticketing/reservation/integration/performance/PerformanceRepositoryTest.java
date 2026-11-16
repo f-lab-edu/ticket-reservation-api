@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.performance.domain.Performance;
+import com.ticketing.reservation.performance.domain.PerformanceStock;
 import com.ticketing.reservation.performance.domain.SalePeriod;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
+import com.ticketing.reservation.performance.repository.PerformanceStockRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -24,9 +26,11 @@ class PerformanceRepositoryTest {
   private static final LocalDateTime PERFORMANCE_AT = NOW.plusDays(30);
 
   @Autowired private PerformanceRepository performanceRepository;
+  @Autowired private PerformanceStockRepository stockRepository;
 
   @AfterEach
   void tearDown() {
+    stockRepository.deleteAllInBatch();
     performanceRepository.deleteAllInBatch();
   }
 
@@ -34,10 +38,10 @@ class PerformanceRepositoryTest {
   @DisplayName("예약 가능한 공연은 판매 기간 안이고 잔여 수량이 있는 공연만 조회한다")
   void findsOnlyAvailablePerformances() {
     // given
-    save("판매 중", NOW.minusDays(1), NOW.plusDays(1), 100);
-    save("판매 예정", NOW.plusDays(1), NOW.plusDays(2), 100);
-    save("판매 종료", NOW.minusDays(2), NOW.minusDays(1), 100);
-    save("매진", NOW.minusDays(1), NOW.plusDays(1), 0);
+    save("판매 중", NOW.minusDays(1), NOW.plusDays(1), 99);
+    save("판매 예정", NOW.plusDays(1), NOW.plusDays(2), 0);
+    save("판매 종료", NOW.minusDays(2), NOW.minusDays(1), 0);
+    save("매진", NOW.minusDays(1), NOW.plusDays(1), 100);
 
     // when
     List<Performance> performances = performanceRepository.findAvailable(NOW);
@@ -50,8 +54,8 @@ class PerformanceRepositoryTest {
   @DisplayName("판매 시작 일시와 현재 시각이 같으면 포함하고 판매 종료 일시와 같으면 제외한다")
   void includesSaleStartAndExcludesSaleEndAtNow() {
     // given
-    save("지금 판매 시작", NOW, NOW.plusDays(1), 100);
-    save("지금 판매 종료", NOW.minusDays(1), NOW, 100);
+    save("지금 판매 시작", NOW, NOW.plusDays(1), 0);
+    save("지금 판매 종료", NOW.minusDays(1), NOW, 0);
 
     // when
     List<Performance> performances = performanceRepository.findAvailable(NOW);
@@ -78,12 +82,12 @@ class PerformanceRepositoryTest {
   }
 
   private void save(String title, LocalDateTime performanceAt) {
-    save(title, performanceAt, NOW.minusDays(1), NOW.plusDays(1), 100);
+    save(title, performanceAt, NOW.minusDays(1), NOW.plusDays(1), 0);
   }
 
   private void save(
-      String title, LocalDateTime saleStartAt, LocalDateTime saleEndAt, int remainingQuantity) {
-    save(title, PERFORMANCE_AT, saleStartAt, saleEndAt, remainingQuantity);
+      String title, LocalDateTime saleStartAt, LocalDateTime saleEndAt, int reservedQuantity) {
+    save(title, PERFORMANCE_AT, saleStartAt, saleEndAt, reservedQuantity);
   }
 
   private void save(
@@ -91,17 +95,18 @@ class PerformanceRepositoryTest {
       LocalDateTime performanceAt,
       LocalDateTime saleStartAt,
       LocalDateTime saleEndAt,
-      int remainingQuantity) {
+      int reservedQuantity) {
     Performance performance =
-        Performance.create(
-            title,
-            "공연장",
-            performanceAt,
-            50_000,
-            100,
-            new SalePeriod(saleStartAt, saleEndAt),
-            saleStartAt.minusDays(1));
-    ReflectionTestUtils.setField(performance, "remainingQuantity", remainingQuantity);
-    performanceRepository.save(performance);
+        performanceRepository.save(
+            Performance.create(
+                title,
+                "공연장",
+                performanceAt,
+                50_000,
+                new SalePeriod(saleStartAt, saleEndAt),
+                saleStartAt.minusDays(1)));
+    PerformanceStock stock = PerformanceStock.create(performance.getId(), 100);
+    ReflectionTestUtils.setField(stock, "reservedQuantity", reservedQuantity);
+    stockRepository.save(stock);
   }
 }

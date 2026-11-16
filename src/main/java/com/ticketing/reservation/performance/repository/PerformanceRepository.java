@@ -14,9 +14,10 @@ public interface PerformanceRepository extends JpaRepository<Performance, Long> 
   @Query(
       """
       select p from Performance p
+      join PerformanceStock s on s.performanceId = p.id
       where p.salePeriod.saleStartAt <= :now
         and p.salePeriod.saleEndAt > :now
-        and p.remainingQuantity > 0
+        and s.reservedQuantity < s.totalQuantity
       order by p.performanceAt asc, p.id asc
       """)
   List<Performance> findAvailable(@Param("now") LocalDateTime now);
