@@ -155,10 +155,75 @@ class PerformanceServiceTest {
   }
 
   @Test
+  @DisplayName("공연 일시가 지난 공연이라도 판매 기간이 유효하지 않으면 판매 기간 오류를 반환한다")
+  void rejectsInvalidSalePeriodBeforeStartedCheck() {
+    // given
+    LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+    Performance performance = save("공연", now.minusDays(3), now.minusDays(2), 100);
+    PerformanceRequest request =
+        new PerformanceRequest(
+            "공연",
+            "공연장",
+            performance.getPerformanceAt(),
+            50_000,
+            100,
+            now.minusDays(3),
+            now.minusDays(3));
+
+    // when
+    Throwable thrown =
+        catchThrowable(() -> performanceService.update(performance.getId(), request));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_SALE_PERIOD));
+  }
+
+  @Test
   @DisplayName("없는 공연을 조회하면 공연 없음 예외가 발생한다")
   void throwsNotFoundWhenPerformanceDoesNotExist() {
     // when
     Throwable thrown = catchThrowable(() -> performanceService.getPerformance(Long.MAX_VALUE));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PERFORMANCE_NOT_FOUND));
+  }
+
+  @Test
+  @DisplayName("없는 공연을 수정하면 공연 없음 예외가 발생한다")
+  void throwsNotFoundWhenUpdatingMissingPerformance() {
+    // given
+    LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+    PerformanceRequest request =
+        new PerformanceRequest(
+            "공연", "공연장", now.plusDays(10), 50_000, 100, now.plusDays(1), now.plusDays(9));
+
+    // when
+    Throwable thrown = catchThrowable(() -> performanceService.update(Long.MAX_VALUE, request));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PERFORMANCE_NOT_FOUND));
+  }
+
+  @Test
+  @DisplayName("없는 공연이면 판매 기간 오류보다 공연 없음 오류를 먼저 반환한다")
+  void rejectsMissingPerformanceBeforeSalePeriodCheck() {
+    // given
+    LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+    PerformanceRequest request =
+        new PerformanceRequest(
+            "공연", "공연장", now.plusDays(10), 50_000, 100, now.plusDays(1), now.plusDays(1));
+
+    // when
+    Throwable thrown = catchThrowable(() -> performanceService.update(Long.MAX_VALUE, request));
 
     // then
     assertThat(thrown)
