@@ -418,3 +418,15 @@ Authorization: Bearer {accessToken}
 | `SCHEDULE_CHANGE_NOT_ALLOWED` | 409 | 예약이 있는데 공연 일시 또는 판매 시작 일시를 바꿈 |
 | `PERFORMANCE_ALREADY_STARTED` | 409 | 공연이 이미 시작됨 |
 | `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량이 이미 예약된 수량보다 적음 |
+
+오류가 여러 개 해당하면 아래 순서에서 먼저 걸리는 오류를 반환합니다.
+
+| 순서 | 오류 | 근거 |
+|---|---|---|
+| 1 | 요청값 형식 오류 (`400`, 코드 없음) | 요청을 해석할 수 없음 |
+| 2 | `PERFORMANCE_NOT_FOUND` | 수정할 공연이 없음 |
+| 3 | `INVALID_SALE_PERIOD` | 공연 상태와 관계없이 성립하지 않는 요청 |
+| 4 | `PERFORMANCE_ALREADY_STARTED` | 시작한 공연은 어떤 항목도 수정할 수 없음 |
+| 5 | `SCHEDULE_CHANGE_NOT_ALLOWED` | 예약이 있으면 일정을 바꿀 수 없음 |
+| 6 | `INVALID_PERFORMANCE_AT`, `INVALID_SALE_START_AT`, `INVALID_SALE_END_AT`, `SALE_END_AFTER_PERFORMANCE` | 일시 값 검증 |
+| 7 | `TOTAL_QUANTITY_BELOW_RESERVED` | 총 판매 수량 검증 |
