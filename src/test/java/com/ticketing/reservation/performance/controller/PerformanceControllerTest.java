@@ -21,6 +21,8 @@ import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.domain.MemberRole;
 import com.ticketing.reservation.performance.domain.Performance;
+import com.ticketing.reservation.performance.domain.PerformanceDetail;
+import com.ticketing.reservation.performance.domain.PerformanceStock;
 import com.ticketing.reservation.performance.domain.SalePeriod;
 import com.ticketing.reservation.performance.dto.PerformanceRequest;
 import com.ticketing.reservation.performance.service.PerformanceService;
@@ -70,26 +72,26 @@ class PerformanceControllerTest {
   @MockitoBean private PerformanceService performanceService;
   @MockitoBean private RefreshTokenRepository refreshTokenRepository;
 
+  private String adminToken;
+
+  @BeforeEach
+  void setUp() {
+    Member admin = Member.create("admin@example.com", "{bcrypt}hash");
+    ReflectionTestUtils.setField(admin, "role", MemberRole.ADMIN);
+    ReflectionTestUtils.setField(admin, "id", 1L);
+    adminToken =
+        new AccessTokenProvider(jwtEncoder, properties, Clock.systemUTC()).issue(admin, "family");
+  }
+
   @Nested
   @DisplayName("공연 등록")
   class Register {
-
-    private String adminToken;
-
-    @BeforeEach
-    void setUp() {
-      Member admin = Member.create("admin@example.com", "{bcrypt}hash");
-      ReflectionTestUtils.setField(admin, "role", MemberRole.ADMIN);
-      ReflectionTestUtils.setField(admin, "id", 1L);
-      adminToken =
-          new AccessTokenProvider(jwtEncoder, properties, Clock.systemUTC()).issue(admin, "family");
-    }
 
     @Test
     @DisplayName("등록에 성공하면 201과 공연 정보를 반환한다")
     void returnsCreatedWithPerformanceWhenSucceeds() throws Exception {
       // given
-      given(performanceService.register(any(PerformanceRequest.class))).willReturn(performance(1L));
+      given(performanceService.register(any(PerformanceRequest.class))).willReturn(detail(1L));
 
       // when
       ResultActions result = register(VALID_FIELDS);
@@ -103,7 +105,7 @@ class PerformanceControllerTest {
           .andExpect(jsonPath("$.performanceAt").value("2026-12-20T19:00:00"))
           .andExpect(jsonPath("$.price").value(50000))
           .andExpect(jsonPath("$.totalQuantity").value(100))
-          .andExpect(jsonPath("$.remainingQuantity").value(100))
+          .andExpect(jsonPath("$.remainingQuantity").value(70))
           .andExpect(jsonPath("$.saleStartAt").value("2026-12-01T10:00:00"))
           .andExpect(jsonPath("$.saleEndAt").value("2026-12-19T18:00:00"));
     }
@@ -176,7 +178,7 @@ class PerformanceControllerTest {
     @DisplayName("공연이 있으면 200과 공연 정보를 반환한다")
     void returnsPerformanceWhenExists() throws Exception {
       // given
-      given(performanceService.getPerformance(1L)).willReturn(performance(1L));
+      given(performanceService.getPerformance(1L)).willReturn(detail(1L));
 
       // when
       ResultActions result = mockMvc.perform(get("/api/v1/performances/1"));
@@ -211,8 +213,7 @@ class PerformanceControllerTest {
     @DisplayName("조건 없이 조회하면 전체 공연 목록을 반환한다")
     void returnsAllPerformancesByDefault() throws Exception {
       // given
-      given(performanceService.getPerformances(false))
-          .willReturn(List.of(performance(1L), performance(2L)));
+      given(performanceService.getPerformances(false)).willReturn(list(1L, 2L));
 
       // when
       ResultActions result = mockMvc.perform(get("/api/v1/performances"));
@@ -226,14 +227,14 @@ class PerformanceControllerTest {
           .andExpect(jsonPath("$.performances[0].venue").value("공연장"))
           .andExpect(jsonPath("$.performances[0].performanceAt").value("2026-12-20T19:00:00"))
           .andExpect(jsonPath("$.performances[0].price").value(50000))
-          .andExpect(jsonPath("$.performances[0].remainingQuantity").value(100));
+          .andExpect(jsonPath("$.performances[0].remainingQuantity").value(70));
     }
 
     @Test
     @DisplayName("available이 true이면 예약 가능한 공연 목록을 조회한다")
     void requestsAvailablePerformancesWhenAvailableIsTrue() throws Exception {
       // given
-      given(performanceService.getPerformances(true)).willReturn(List.of(performance(1L)));
+      given(performanceService.getPerformances(true)).willReturn(list(1L));
 
       // when
       ResultActions result =
@@ -244,6 +245,16 @@ class PerformanceControllerTest {
     }
   }
 
+  private static PerformanceDetail detail(Long id) {
+    PerformanceStock stock = PerformanceStock.create(id, 100);
+    ReflectionTestUtils.setField(stock, "reservedQuantity", 30);
+    return new PerformanceDetail(performance(id), stock);
+  }
+
+  private static List<PerformanceDetail> list(Long... ids) {
+    return Stream.of(ids).map(PerformanceControllerTest::detail).toList();
+  }
+
   private static Performance performance(Long id) {
     Performance performance =
         Performance.create(
@@ -251,7 +262,6 @@ class PerformanceControllerTest {
             "공연장",
             LocalDateTime.parse("2026-12-20T19:00:00"),
             50_000,
-            100,
             new SalePeriod(
                 LocalDateTime.parse("2026-12-01T10:00:00"),
                 LocalDateTime.parse("2026-12-19T18:00:00")),

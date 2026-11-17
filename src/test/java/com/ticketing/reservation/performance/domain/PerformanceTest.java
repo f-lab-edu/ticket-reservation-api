@@ -7,7 +7,6 @@ import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -17,17 +16,6 @@ class PerformanceTest {
   private static final LocalDateTime SALE_START_AT = NOW.plusDays(1);
   private static final LocalDateTime SALE_END_AT = NOW.plusDays(10);
   private static final LocalDateTime PERFORMANCE_AT = NOW.plusDays(20);
-
-  @Test
-  @DisplayName("공연을 생성하면 잔여 판매 수량이 총 판매 수량과 같다")
-  void setsRemainingQuantityToTotalQuantity() {
-    // when
-    Performance performance = create(PERFORMANCE_AT, SALE_START_AT, SALE_END_AT);
-
-    // then
-    assertThat(performance.getTotalQuantity()).isEqualTo(100);
-    assertThat(performance.getRemainingQuantity()).isEqualTo(100);
-  }
 
   @ParameterizedTest
   @DisplayName("판매 시작 일시가 현재 시각과 같거나 빠르면 거절한다")
@@ -60,7 +48,7 @@ class PerformanceTest {
   private Performance create(
       LocalDateTime performanceAt, LocalDateTime saleStartAt, LocalDateTime saleEndAt) {
     return Performance.create(
-        "공연", "공연장", performanceAt, 50_000, 100, new SalePeriod(saleStartAt, saleEndAt), NOW);
+        "공연", "공연장", performanceAt, 50_000, new SalePeriod(saleStartAt, saleEndAt), NOW);
   }
 
   private void assertErrorCode(Throwable thrown, ErrorCode errorCode) {

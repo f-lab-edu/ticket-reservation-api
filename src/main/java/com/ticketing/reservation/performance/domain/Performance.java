@@ -27,27 +27,16 @@ public class Performance {
 
   private int price;
 
-  private int totalQuantity;
-
-  private int remainingQuantity;
-
   @Embedded private SalePeriod salePeriod;
 
   protected Performance() {}
 
   private Performance(
-      String title,
-      String venue,
-      LocalDateTime performanceAt,
-      int price,
-      int totalQuantity,
-      SalePeriod salePeriod) {
+      String title, String venue, LocalDateTime performanceAt, int price, SalePeriod salePeriod) {
     this.title = title;
     this.venue = venue;
     this.performanceAt = performanceAt;
     this.price = price;
-    this.totalQuantity = totalQuantity;
-    this.remainingQuantity = totalQuantity;
     this.salePeriod = salePeriod;
   }
 
@@ -56,7 +45,6 @@ public class Performance {
       String venue,
       LocalDateTime performanceAt,
       int price,
-      int totalQuantity,
       SalePeriod salePeriod,
       LocalDateTime now) {
     if (!salePeriod.saleStartAt().isAfter(now)) {
@@ -65,7 +53,7 @@ public class Performance {
     if (!salePeriod.saleEndAt().isBefore(performanceAt)) {
       throw new BusinessException(ErrorCode.SALE_END_AFTER_PERFORMANCE);
     }
-    return new Performance(title, venue, performanceAt, price, totalQuantity, salePeriod);
+    return new Performance(title, venue, performanceAt, price, salePeriod);
   }
 
   public Long getId() {
@@ -86,14 +74,6 @@ public class Performance {
 
   public int getPrice() {
     return price;
-  }
-
-  public int getTotalQuantity() {
-    return totalQuantity;
-  }
-
-  public int getRemainingQuantity() {
-    return remainingQuantity;
   }
 
   public SalePeriod getSalePeriod() {
