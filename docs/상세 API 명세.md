@@ -55,6 +55,9 @@
 | `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량은 예약된 수량보다 적을 수 없습니다. |
 | `PERFORMANCE_MODIFIED` | 412 | 공연 정보가 변경되었습니다. 최신 정보를 다시 조회한 뒤 수정해 주세요. |
 | `IF_MATCH_REQUIRED` | 428 | If-Match 헤더에 조회 시 받은 ETag 하나를 포함해야 합니다. |
+| `STOCK_BUSY` | 503 | 요청이 많아 처리하지 못했습니다. 잠시 후 다시 시도해 주세요. |
+| `NOT_ON_SALE` | 409 | 판매 기간이 아닌 공연입니다. |
+| `INSUFFICIENT_STOCK` | 409 | 잔여 판매 수량이 부족합니다. |
 
 ### 1.3. 인증
 
@@ -454,6 +457,7 @@ If-Match: "0"
 | `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량이 이미 예약된 수량보다 적음 |
 | `PERFORMANCE_MODIFIED` | 412 | `If-Match`가 현재 공연 정보의 `ETag`와 일치하지 않음 (다른 수정이 먼저 반영됨) |
 | `IF_MATCH_REQUIRED` | 428 | `If-Match` 헤더가 없거나, `*`가 들어 있거나, 형식에 맞는 ETag가 정확히 하나가 아님 |
+| `STOCK_BUSY` | 503 | 같은 공연의 예약·수정 요청이 몰려 재고 잠금을 3초 안에 얻지 못함 |
 
 오류가 여러 개 해당하면 아래 우선순위가 높은(숫자가 작은) 그룹의 오류를 먼저 반환합니다.
 
@@ -461,9 +465,78 @@ If-Match: "0"
 |---|---|---|
 | 1 | 요청 파싱·형식 오류 | 요청값 형식 오류 (`400`, 코드 없음) |
 | 2 | 요청 선결 조건 | `IF_MATCH_REQUIRED` |
-| 3 | 대상 리소스 확인 | `PERFORMANCE_NOT_FOUND` |
-| 4 | 동시성 충돌 | `PERFORMANCE_MODIFIED` |
-| 5 | 상태 기반 업무 규칙 | `PERFORMANCE_ALREADY_STARTED` → `SCHEDULE_CHANGE_NOT_ALLOWED` |
-| 6 | 날짜 값 검증 | `INVALID_SALE_PERIOD`, `INVALID_SALE_START_AT`, `INVALID_SALE_END_AT`, `INVALID_PERFORMANCE_AT`, `SALE_END_AFTER_PERFORMANCE` |
-| 7 | 예약 수량에 기대는 검증 | `TOTAL_QUANTITY_BELOW_RESERVED` |
+| 3 | 처리 혼잡 | `STOCK_BUSY` |
+| 4 | 대상 리소스 확인 | `PERFORMANCE_NOT_FOUND` |
+| 5 | 동시성 충돌 | `PERFORMANCE_MODIFIED` |
+| 6 | 상태 기반 업무 규칙 | `PERFORMANCE_ALREADY_STARTED` → `SCHEDULE_CHANGE_NOT_ALLOWED` |
+| 7 | 날짜 값 검증 | `INVALID_SALE_PERIOD`, `INVALID_SALE_START_AT`, `INVALID_SALE_END_AT`, `INVALID_PERFORMANCE_AT`, `SALE_END_AFTER_PERFORMANCE` |
+| 8 | 예약 수량에 기대는 검증 | `TOTAL_QUANTITY_BELOW_RESERVED` |
 
+## 5. 예약
+
+- 요청의 일시 형식은 공연(4장)과 같습니다.
+- 응답의 예약 일시(`reservedAt`)와 결제 제한 시각(`paymentDeadlineAt`)은 마이크로초 6자리까지 `yyyy-MM-dd'T'HH:mm:ss.SSSSSS` 형식으로 반환합니다. 예: `2026-12-05T12:00:00.123456`
+
+### 5.1. 예약 신청
+
+`POST /api/v1/reservations` · 인증 필요(회원, 관리자) · 기능정의서 4.9.1
+
+#### 요청
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `performanceId` | integer | O | 예약할 공연 식별자 |
+| `quantity` | integer | O | 예약 수량 (1 이상, 4.9.1.1.2) |
+
+```json
+{
+  "performanceId": 1,
+  "quantity": 2
+}
+```
+
+#### 응답: `201 Created`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | integer | 예약 식별자 |
+| `performanceId` | integer | 공연 식별자 |
+| `quantity` | integer | 예약 수량 |
+| `unitPrice` | integer | 예약 당시 티켓 가격 (4.9.1.4) |
+| `totalPrice` | integer | 예약 금액 (`unitPrice` × `quantity`) |
+| `status` | string | 예약 상태. 신청 직후에는 항상 `PENDING_PAYMENT`(결제 대기, 4.9.1.2) |
+| `reservedAt` | string | 예약 일시 |
+| `paymentDeadlineAt` | string | 결제 제한 시각. 예약 일시 10분 후와 공연 일시 중 이른 시각 (4.9.1.2.1) |
+
+```json
+{
+  "id": 10,
+  "performanceId": 1,
+  "quantity": 2,
+  "unitPrice": 50000,
+  "totalPrice": 100000,
+  "status": "PENDING_PAYMENT",
+  "reservedAt": "2026-12-05T12:00:00.123456",
+  "paymentDeadlineAt": "2026-12-05T12:10:00.123456"
+}
+```
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | 요청값이 필수 여부·형식·조건을 만족하지 않음 (`quantity` < 1 포함) |
+| `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |
+| `NOT_ON_SALE` | 409 | 판매 시작 일시 ≤ 현재 시각 < 판매 종료 일시를 만족하지 않음 |
+| `INSUFFICIENT_STOCK` | 409 | 예약 수량 > 잔여 판매 수량 |
+| `STOCK_BUSY` | 503 | 같은 공연의 예약·수정 요청이 몰려 재고 잠금을 3초 안에 얻지 못함 |
+
+오류가 여러 개 해당하면 아래 우선순위가 높은(숫자가 작은) 그룹의 오류를 먼저 반환합니다.
+
+| 우선순위 | 오류 그룹 | 오류 |
+|---|---|---|
+| 1 | 요청 파싱·형식 오류 | 요청값 형식 오류 (`400`, 코드 없음) |
+| 2 | 처리 혼잡 | `STOCK_BUSY` |
+| 3 | 대상 리소스 확인 | `PERFORMANCE_NOT_FOUND` |
+| 4 | 상태 기반 업무 규칙 | `NOT_ON_SALE` |
+| 5 | 예약 수량에 기대는 검증 | `INSUFFICIENT_STOCK` |

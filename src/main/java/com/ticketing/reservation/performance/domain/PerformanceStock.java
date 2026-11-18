@@ -32,6 +32,13 @@ public class PerformanceStock {
     this.totalQuantity = totalQuantity;
   }
 
+  public void reserve(int quantity) {
+    if (quantity > getRemainingQuantity()) {
+      throw new BusinessException(ErrorCode.INSUFFICIENT_STOCK);
+    }
+    this.reservedQuantity += quantity;
+  }
+
   public boolean hasReservation() {
     return reservedQuantity > 0;
   }
@@ -42,6 +49,10 @@ public class PerformanceStock {
 
   public int getTotalQuantity() {
     return totalQuantity;
+  }
+
+  public int getReservedQuantity() {
+    return reservedQuantity;
   }
 
   public int getRemainingQuantity() {

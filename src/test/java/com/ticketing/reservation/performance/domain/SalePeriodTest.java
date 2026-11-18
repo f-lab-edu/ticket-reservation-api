@@ -8,6 +8,7 @@ import com.ticketing.reservation.global.error.ErrorCode;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class SalePeriodTest {
@@ -29,5 +30,19 @@ class SalePeriodTest {
         .isInstanceOfSatisfying(
             BusinessException.class,
             e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_SALE_PERIOD));
+  }
+
+  @ParameterizedTest(name = "판매 시작 기준 {0}분: {1}")
+  @DisplayName("판매 시작 일시 이상, 판매 종료 일시 미만이면 판매 중이다")
+  @CsvSource({"-1, false", "0, true", "60, false"})
+  void isOnSaleFromStartUntilBeforeEnd(long minutesFromSaleStart, boolean expected) {
+    // given
+    SalePeriod salePeriod = new SalePeriod(SALE_START_AT, SALE_START_AT.plusMinutes(60));
+
+    // when
+    boolean onSale = salePeriod.isOnSale(SALE_START_AT.plusMinutes(minutesFromSaleStart));
+
+    // then
+    assertThat(onSale).isEqualTo(expected);
   }
 }
