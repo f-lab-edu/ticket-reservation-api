@@ -108,7 +108,7 @@ class PerformanceTest {
           catchThrowable(
               () ->
                   performance.update(
-                      new PerformanceUpdate(
+                      new PerformanceInfo(
                           "공연", "공연장", PERFORMANCE_AT, 50_000, SALE_START_AT, SALE_START_AT),
                       false,
                       PERFORMANCE_AT));
@@ -200,7 +200,7 @@ class PerformanceTest {
 
       // when
       performance.update(
-          new PerformanceUpdate(
+          new PerformanceInfo(
               "새 공연",
               "새 공연장",
               performanceAt,
@@ -227,7 +227,7 @@ class PerformanceTest {
 
       // when
       performance.update(
-          new PerformanceUpdate(
+          new PerformanceInfo(
               "새 공연",
               "새 공연장",
               PERFORMANCE_AT,
@@ -270,7 +270,7 @@ class PerformanceTest {
         boolean hasReservation,
         LocalDateTime now) {
       performance.update(
-          new PerformanceUpdate(
+          new PerformanceInfo(
               "공연", "공연장", performanceAt, 50_000, salePeriod.saleStartAt(), salePeriod.saleEndAt()),
           hasReservation,
           now);
@@ -279,12 +279,7 @@ class PerformanceTest {
 
   private Performance create(LocalDateTime saleStartAt, LocalDateTime saleEndAt) {
     return Performance.create(
-        "공연",
-        "공연장",
-        PerformanceTest.PERFORMANCE_AT,
-        50_000,
-        new SalePeriod(saleStartAt, saleEndAt),
-        NOW);
+        new PerformanceInfo("공연", "공연장", PERFORMANCE_AT, 50_000, saleStartAt, saleEndAt), NOW);
   }
 
   private void assertErrorCode(Throwable thrown, ErrorCode errorCode) {

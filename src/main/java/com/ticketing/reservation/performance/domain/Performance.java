@@ -42,16 +42,12 @@ public class Performance {
     this.salePeriod = salePeriod;
   }
 
-  public static Performance create(
-      String title,
-      String venue,
-      LocalDateTime performanceAt,
-      int price,
-      SalePeriod salePeriod,
-      LocalDateTime now) {
+  public static Performance create(PerformanceInfo info, LocalDateTime now) {
+    SalePeriod salePeriod = new SalePeriod(info.saleStartAt(), info.saleEndAt());
     validateSaleStartAt(salePeriod, now);
-    validateSaleEndBeforePerformance(salePeriod, performanceAt);
-    return new Performance(title, venue, performanceAt, price, salePeriod);
+    validateSaleEndBeforePerformance(salePeriod, info.performanceAt());
+    return new Performance(
+        info.title(), info.venue(), info.performanceAt(), info.price(), salePeriod);
   }
 
   private void validateUpdatable(
@@ -70,7 +66,7 @@ public class Performance {
     }
   }
 
-  public void update(PerformanceUpdate changes, boolean hasReservation, LocalDateTime now) {
+  public void update(PerformanceInfo changes, boolean hasReservation, LocalDateTime now) {
     validateUpdatable(changes.performanceAt(), changes.saleStartAt(), hasReservation, now);
 
     SalePeriod newSalePeriod = new SalePeriod(changes.saleStartAt(), changes.saleEndAt());

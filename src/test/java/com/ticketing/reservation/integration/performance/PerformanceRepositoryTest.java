@@ -6,8 +6,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.performance.domain.Performance;
+import com.ticketing.reservation.performance.domain.PerformanceInfo;
 import com.ticketing.reservation.performance.domain.PerformanceStock;
-import com.ticketing.reservation.performance.domain.SalePeriod;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import com.ticketing.reservation.performance.repository.PerformanceStockRepository;
 import java.time.LocalDateTime;
@@ -110,11 +110,7 @@ class PerformanceRepositoryTest {
     Performance performance =
         performanceRepository.save(
             Performance.create(
-                title,
-                "공연장",
-                performanceAt,
-                50_000,
-                new SalePeriod(saleStartAt, saleEndAt),
+                new PerformanceInfo(title, "공연장", performanceAt, 50_000, saleStartAt, saleEndAt),
                 saleStartAt.minusDays(1)));
     PerformanceStock stock = PerformanceStock.create(performance.getId(), 100);
     ReflectionTestUtils.setField(stock, "reservedQuantity", reservedQuantity);

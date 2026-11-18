@@ -11,9 +11,9 @@ import com.ticketing.reservation.global.web.IfMatch;
 import com.ticketing.reservation.integration.TestcontainersConfiguration;
 import com.ticketing.reservation.performance.domain.Performance;
 import com.ticketing.reservation.performance.domain.PerformanceDetail;
+import com.ticketing.reservation.performance.domain.PerformanceInfo;
 import com.ticketing.reservation.performance.domain.PerformanceStock;
 import com.ticketing.reservation.performance.domain.SalePeriod;
-import com.ticketing.reservation.performance.dto.PerformanceRequest;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import com.ticketing.reservation.performance.repository.PerformanceStockRepository;
 import com.ticketing.reservation.performance.service.PerformanceService;
@@ -65,11 +65,11 @@ class PerformanceServiceTest {
         LocalDateTime.now(clock).plusDays(30).truncatedTo(ChronoUnit.SECONDS);
     LocalDateTime saleStartAt = performanceAt.minusDays(29);
     LocalDateTime saleEndAt = performanceAt.minusDays(1);
-    PerformanceRequest request =
-        new PerformanceRequest("공연", "공연장", performanceAt, 50_000, 100, saleStartAt, saleEndAt);
+    PerformanceInfo info =
+        new PerformanceInfo("공연", "공연장", performanceAt, 50_000, saleStartAt, saleEndAt);
 
     // when
-    PerformanceDetail detail = performanceService.register(request);
+    PerformanceDetail detail = performanceService.register(info, 100);
 
     // then
     Long performanceId = detail.performance().getId();
@@ -93,11 +93,17 @@ class PerformanceServiceTest {
     LocalDateTime performanceAt = now.plusDays(20);
     LocalDateTime saleStartAt = now.plusDays(2);
     LocalDateTime saleEndAt = now.plusDays(15);
-    PerformanceRequest request =
-        new PerformanceRequest("새 공연", "새 공연장", performanceAt, 60_000, 120, saleStartAt, saleEndAt);
+    UpdateRequest request =
+        new UpdateRequest(
+            new PerformanceInfo("새 공연", "새 공연장", performanceAt, 60_000, saleStartAt, saleEndAt),
+            120);
 
     // when
-    performanceService.update(performance.getId(), request, ifMatch(performance.getVersion()));
+    performanceService.update(
+        performance.getId(),
+        request.info(),
+        request.totalQuantity(),
+        ifMatch(performance.getVersion()));
 
     // then
     Performance saved = performanceRepository.findById(performance.getId()).orElseThrow();
@@ -118,14 +124,17 @@ class PerformanceServiceTest {
     LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     Performance performance = save("공연", now.plusDays(1), now.plusDays(10), 100);
     reserve(performance, 30);
-    PerformanceRequest request = requestFor(performance).title("새 공연").totalQuantity(29).build();
+    UpdateRequest request = requestFor(performance).title("새 공연").totalQuantity(29).build();
 
     // when
     Throwable thrown =
         catchThrowable(
             () ->
                 performanceService.update(
-                    performance.getId(), request, ifMatch(performance.getVersion())));
+                    performance.getId(),
+                    request.info(),
+                    request.totalQuantity(),
+                    ifMatch(performance.getVersion())));
 
     // then
     assertThat(thrown)
@@ -152,14 +161,17 @@ class PerformanceServiceTest {
             ? save("공연", now.minusDays(3), now.minusDays(2), 100)
             : save("공연", now.plusDays(1), now.plusDays(10), 100);
     reserve(performance, reservedQuantity);
-    PerformanceRequest request = requestModifier.apply(requestFor(performance)).build();
+    UpdateRequest request = requestModifier.apply(requestFor(performance)).build();
 
     // when
     Throwable thrown =
         catchThrowable(
             () ->
                 performanceService.update(
-                    performance.getId(), request, ifMatch(performance.getVersion())));
+                    performance.getId(),
+                    request.info(),
+                    request.totalQuantity(),
+                    ifMatch(performance.getVersion())));
 
     // then
     assertThat(thrown)
@@ -208,11 +220,12 @@ class PerformanceServiceTest {
     LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     Performance performance = save("공연", now.plusDays(1), now.plusDays(10), 100);
     long initialVersion = performance.getVersion();
-    PerformanceRequest request = requestFor(performance).totalQuantity(120).build();
+    UpdateRequest request = requestFor(performance).totalQuantity(120).build();
 
     // when
     PerformanceDetail detail =
-        performanceService.update(performance.getId(), request, ifMatch(initialVersion));
+        performanceService.update(
+            performance.getId(), request.info(), request.totalQuantity(), ifMatch(initialVersion));
 
     // then
     long savedVersion =
@@ -228,10 +241,14 @@ class PerformanceServiceTest {
     LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
     Performance performance = save("공연", now.plusDays(1), now.plusDays(10), 100);
     long initialVersion = performance.getVersion();
+    UpdateRequest firstUpdate = requestFor(performance).title("먼저 수정").build();
     performanceService.update(
         performance.getId(),
-        requestFor(performance).title("먼저 수정").build(),
+        firstUpdate.info(),
+        firstUpdate.totalQuantity(),
         ifMatch(initialVersion));
+
+    UpdateRequest secondUpdate = requestFor(performance).title("나중 수정").build();
 
     // when
     Throwable thrown =
@@ -239,7 +256,8 @@ class PerformanceServiceTest {
             () ->
                 performanceService.update(
                     performance.getId(),
-                    requestFor(performance).title("나중 수정").build(),
+                    secondUpdate.info(),
+                    secondUpdate.totalQuantity(),
                     ifMatch(initialVersion)));
 
     // then
@@ -260,18 +278,23 @@ class PerformanceServiceTest {
     Performance performance = save("공연", now.plusDays(1), now.plusDays(10), 100);
     reserve(performance, 30);
     long initialVersion = performance.getVersion();
+    UpdateRequest firstUpdate = requestFor(performance).title("먼저 수정").build();
     performanceService.update(
         performance.getId(),
-        requestFor(performance).title("먼저 수정").build(),
+        firstUpdate.info(),
+        firstUpdate.totalQuantity(),
         ifMatch(initialVersion));
-    PerformanceRequest scheduleChange = requestFor(performance).delayPerformanceAt().build();
+    UpdateRequest scheduleChange = requestFor(performance).delayPerformanceAt().build();
 
     // when
     Throwable thrown =
         catchThrowable(
             () ->
                 performanceService.update(
-                    performance.getId(), scheduleChange, ifMatch(initialVersion)));
+                    performance.getId(),
+                    scheduleChange.info(),
+                    scheduleChange.totalQuantity(),
+                    ifMatch(initialVersion)));
 
     // then
     assertThat(thrown)
@@ -295,7 +318,7 @@ class PerformanceServiceTest {
     // when
     try (ExecutorService executor = Executors.newFixedThreadPool(threadCount)) {
       for (int i = 0; i < threadCount; i++) {
-        PerformanceRequest request =
+        UpdateRequest request =
             requestFor(performance).title("수정 " + i).totalQuantity(100 + i).build();
         futures.add(
             executor.submit(
@@ -304,7 +327,10 @@ class PerformanceServiceTest {
                   start.await();
                   try {
                     performanceService.update(
-                        performance.getId(), request, ifMatch(initialVersion));
+                        performance.getId(),
+                        request.info(),
+                        request.totalQuantity(),
+                        ifMatch(initialVersion));
                     return null;
                   } catch (BusinessException e) {
                     return e.getErrorCode();
@@ -344,13 +370,18 @@ class PerformanceServiceTest {
   void throwsNotFoundWhenUpdatingMissingPerformance() {
     // given
     LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-    PerformanceRequest request =
-        new PerformanceRequest(
-            "공연", "공연장", now.plusDays(10), 50_000, 100, now.plusDays(1), now.plusDays(9));
+    UpdateRequest request =
+        new UpdateRequest(
+            new PerformanceInfo(
+                "공연", "공연장", now.plusDays(10), 50_000, now.plusDays(1), now.plusDays(9)),
+            100);
 
     // when
     Throwable thrown =
-        catchThrowable(() -> performanceService.update(Long.MAX_VALUE, request, ifMatch(0)));
+        catchThrowable(
+            () ->
+                performanceService.update(
+                    Long.MAX_VALUE, request.info(), request.totalQuantity(), ifMatch(0)));
 
     // then
     assertThat(thrown)
@@ -364,13 +395,18 @@ class PerformanceServiceTest {
   void rejectsMissingPerformanceBeforeSalePeriodCheck() {
     // given
     LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-    PerformanceRequest request =
-        new PerformanceRequest(
-            "공연", "공연장", now.plusDays(10), 50_000, 100, now.plusDays(1), now.plusDays(1));
+    UpdateRequest request =
+        new UpdateRequest(
+            new PerformanceInfo(
+                "공연", "공연장", now.plusDays(10), 50_000, now.plusDays(1), now.plusDays(1)),
+            100);
 
     // when
     Throwable thrown =
-        catchThrowable(() -> performanceService.update(Long.MAX_VALUE, request, ifMatch(0)));
+        catchThrowable(
+            () ->
+                performanceService.update(
+                    Long.MAX_VALUE, request.info(), request.totalQuantity(), ifMatch(0)));
 
     // then
     assertThat(thrown)
@@ -402,11 +438,8 @@ class PerformanceServiceTest {
     Performance performance =
         performanceRepository.save(
             Performance.create(
-                title,
-                "공연장",
-                saleEndAt.plusDays(1),
-                50_000,
-                new SalePeriod(saleStartAt, saleEndAt),
+                new PerformanceInfo(
+                    title, "공연장", saleEndAt.plusDays(1), 50_000, saleStartAt, saleEndAt),
                 saleStartAt.minusDays(1)));
     stockRepository.save(PerformanceStock.create(performance.getId(), totalQuantity));
     return performance;
@@ -462,11 +495,14 @@ class PerformanceServiceTest {
       return this;
     }
 
-    PerformanceRequest build() {
-      return new PerformanceRequest(
-          title, venue, performanceAt, price, totalQuantity, saleStartAt, saleEndAt);
+    UpdateRequest build() {
+      return new UpdateRequest(
+          new PerformanceInfo(title, venue, performanceAt, price, saleStartAt, saleEndAt),
+          totalQuantity);
     }
   }
+
+  private record UpdateRequest(PerformanceInfo info, int totalQuantity) {}
 
   private void reserve(Performance performance, int reservedQuantity) {
     PerformanceStock stock = stockRepository.findById(performance.getId()).orElseThrow();

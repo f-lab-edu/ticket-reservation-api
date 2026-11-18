@@ -34,7 +34,9 @@ public class PerformanceController {
   @PostMapping
   public ResponseEntity<PerformanceDetailResponse> register(
       @Valid @RequestBody PerformanceRequest request) {
-    return withETag(HttpStatus.CREATED, performanceService.register(request));
+    return withETag(
+        HttpStatus.CREATED,
+        performanceService.register(request.toPerformanceInfo(), request.totalQuantity()));
   }
 
   @GetMapping("/{performanceId}")
@@ -50,7 +52,11 @@ public class PerformanceController {
       @Valid @RequestBody PerformanceRequest request) {
     return ResponseEntity.ok(
         PerformanceDetailResponse.from(
-            performanceService.update(performanceId, request, IfMatch.parse(ifMatch))));
+            performanceService.update(
+                performanceId,
+                request.toPerformanceInfo(),
+                request.totalQuantity(),
+                IfMatch.parse(ifMatch))));
   }
 
   @GetMapping

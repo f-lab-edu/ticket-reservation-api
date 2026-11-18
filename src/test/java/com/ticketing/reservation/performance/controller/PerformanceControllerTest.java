@@ -2,6 +2,7 @@ package com.ticketing.reservation.performance.controller;
 
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -27,9 +28,8 @@ import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.domain.MemberRole;
 import com.ticketing.reservation.performance.domain.Performance;
 import com.ticketing.reservation.performance.domain.PerformanceDetail;
+import com.ticketing.reservation.performance.domain.PerformanceInfo;
 import com.ticketing.reservation.performance.domain.PerformanceStock;
-import com.ticketing.reservation.performance.domain.SalePeriod;
-import com.ticketing.reservation.performance.dto.PerformanceRequest;
 import com.ticketing.reservation.performance.service.PerformanceService;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -96,7 +96,8 @@ class PerformanceControllerTest {
     @DisplayName("등록에 성공하면 201과 공연 정보를 반환한다")
     void returnsCreatedWithPerformanceWhenSucceeds() throws Exception {
       // given
-      given(performanceService.register(any(PerformanceRequest.class))).willReturn(detail(1L));
+      given(performanceService.register(any(PerformanceInfo.class), anyInt()))
+          .willReturn(detail(1L));
 
       // when
       ResultActions result = register(VALID_FIELDS);
@@ -136,7 +137,7 @@ class PerformanceControllerTest {
     @DisplayName("일시 규칙을 위반하면 400과 오류 코드를 반환한다")
     void returnsBadRequestWhenScheduleIsInvalid() throws Exception {
       // given
-      given(performanceService.register(any(PerformanceRequest.class)))
+      given(performanceService.register(any(PerformanceInfo.class), anyInt()))
           .willThrow(new BusinessException(ErrorCode.SALE_END_AFTER_PERFORMANCE));
 
       // when
@@ -228,7 +229,10 @@ class PerformanceControllerTest {
       ReflectionTestUtils.setField(updated.performance(), "version", 4L);
       given(
               performanceService.update(
-                  eq(1L), any(PerformanceRequest.class), argThat(ifMatch -> ifMatch.matches(3L))))
+                  eq(1L),
+                  any(PerformanceInfo.class),
+                  anyInt(),
+                  argThat(ifMatch -> ifMatch.matches(3L))))
           .willReturn(updated);
 
       // when
@@ -279,7 +283,9 @@ class PerformanceControllerTest {
     @DisplayName("다른 수정이 먼저 반영됐으면 412와 오류 코드를 반환한다")
     void returnsPreconditionFailedWhenPerformanceWasModified() throws Exception {
       // given
-      given(performanceService.update(eq(1L), any(PerformanceRequest.class), any(IfMatch.class)))
+      given(
+              performanceService.update(
+                  eq(1L), any(PerformanceInfo.class), anyInt(), any(IfMatch.class)))
           .willThrow(new BusinessException(ErrorCode.PERFORMANCE_MODIFIED));
 
       // when
@@ -359,11 +365,11 @@ class PerformanceControllerTest {
   private static Performance performance(Long id) {
     Performance performance =
         Performance.create(
-            "공연",
-            "공연장",
-            LocalDateTime.parse("2026-12-20T19:00:00"),
-            50_000,
-            new SalePeriod(
+            new PerformanceInfo(
+                "공연",
+                "공연장",
+                LocalDateTime.parse("2026-12-20T19:00:00"),
+                50_000,
                 LocalDateTime.parse("2026-12-01T10:00:00"),
                 LocalDateTime.parse("2026-12-19T18:00:00")),
             LocalDateTime.parse("2026-11-12T12:00:00"));
