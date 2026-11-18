@@ -67,7 +67,8 @@ public class PerformanceService {
         request.venue(),
         request.performanceAt(),
         request.price(),
-        new SalePeriod(request.saleStartAt(), request.saleEndAt()),
+        request.saleStartAt(),
+        request.saleEndAt(),
         stock.hasReservation(),
         LocalDateTime.now(clock));
     stock.changeTotalQuantity(request.totalQuantity());

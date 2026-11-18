@@ -54,24 +54,38 @@ public class Performance {
     return new Performance(title, venue, performanceAt, price, salePeriod);
   }
 
+  private void validateUpdatable(
+      LocalDateTime performanceAt,
+      LocalDateTime saleStartAt,
+      boolean hasReservation,
+      LocalDateTime now) {
+    if (!this.performanceAt.isAfter(now)) {
+      throw new BusinessException(ErrorCode.PERFORMANCE_ALREADY_STARTED);
+    }
+    boolean scheduleChanged =
+        !performanceAt.isEqual(this.performanceAt)
+            || !saleStartAt.isEqual(this.salePeriod.saleStartAt());
+    if (hasReservation && scheduleChanged) {
+      throw new BusinessException(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
+    }
+  }
+
   public void update(
       String title,
       String venue,
       LocalDateTime performanceAt,
       int price,
-      SalePeriod salePeriod,
+      LocalDateTime saleStartAt,
+      LocalDateTime saleEndAt,
       boolean hasReservation,
       LocalDateTime now) {
-    boolean performanceAtChanged = !performanceAt.isEqual(this.performanceAt);
-    boolean saleStartChanged = !salePeriod.saleStartAt().isEqual(this.salePeriod.saleStartAt());
-    boolean saleEndChanged = !salePeriod.saleEndAt().isEqual(this.salePeriod.saleEndAt());
+    validateUpdatable(performanceAt, saleStartAt, hasReservation, now);
 
-    if (!this.performanceAt.isAfter(now)) {
-      throw new BusinessException(ErrorCode.PERFORMANCE_ALREADY_STARTED);
-    }
-    if (hasReservation && (performanceAtChanged || saleStartChanged)) {
-      throw new BusinessException(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
-    }
+    SalePeriod salePeriod = new SalePeriod(saleStartAt, saleEndAt);
+    boolean performanceAtChanged = !performanceAt.isEqual(this.performanceAt);
+    boolean saleStartChanged = !saleStartAt.isEqual(this.salePeriod.saleStartAt());
+    boolean saleEndChanged = !saleEndAt.isEqual(this.salePeriod.saleEndAt());
+
     if (performanceAtChanged && !performanceAt.isAfter(now)) {
       throw new BusinessException(ErrorCode.INVALID_PERFORMANCE_AT);
     }
@@ -124,11 +138,11 @@ public class Performance {
     return price;
   }
 
-  public long getVersion() {
-    return version;
-  }
-
   public SalePeriod getSalePeriod() {
     return salePeriod;
+  }
+
+  public long getVersion() {
+    return version;
   }
 }

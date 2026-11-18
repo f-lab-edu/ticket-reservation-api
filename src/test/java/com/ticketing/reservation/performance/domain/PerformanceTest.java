@@ -28,7 +28,7 @@ class PerformanceTest {
     LocalDateTime saleStartAt = NOW.minusMinutes(minutesBeforeNow);
 
     // when
-    Throwable thrown = catchThrowable(() -> create(PERFORMANCE_AT, saleStartAt, SALE_END_AT));
+    Throwable thrown = catchThrowable(() -> create(saleStartAt, SALE_END_AT));
 
     // then
     assertErrorCode(thrown, ErrorCode.INVALID_SALE_START_AT);
@@ -42,7 +42,7 @@ class PerformanceTest {
     LocalDateTime saleEndAt = PERFORMANCE_AT.plusMinutes(minutesAfterPerformance);
 
     // when
-    Throwable thrown = catchThrowable(() -> create(PERFORMANCE_AT, SALE_START_AT, saleEndAt));
+    Throwable thrown = catchThrowable(() -> create(SALE_START_AT, saleEndAt));
 
     // then
     assertErrorCode(thrown, ErrorCode.SALE_END_AFTER_PERFORMANCE);
@@ -59,7 +59,7 @@ class PerformanceTest {
 
     @BeforeEach
     void setUp() {
-      performance = create(PERFORMANCE_AT, SALE_START_AT, SALE_END_AT);
+      performance = create(SALE_START_AT, SALE_END_AT);
     }
 
     @ParameterizedTest
@@ -86,6 +86,39 @@ class PerformanceTest {
 
       // then
       assertErrorCode(thrown, ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
+    }
+
+    @Test
+    @DisplayName("공연 일시가 지난 공연이면 일정 변경 불가 오류보다 공연 시작 오류를 먼저 반환한다")
+    void rejectsStartedPerformanceBeforeScheduleChangeCheck() {
+      // when
+      Throwable thrown =
+          catchThrowable(
+              () -> update(PERFORMANCE_AT.plusMinutes(1), SALE_PERIOD, true, PERFORMANCE_AT));
+
+      // then
+      assertErrorCode(thrown, ErrorCode.PERFORMANCE_ALREADY_STARTED);
+    }
+
+    @Test
+    @DisplayName("공연 일시가 지난 공연이면 판매 기간 오류보다 공연 시작 오류를 먼저 반환한다")
+    void rejectsStartedPerformanceBeforeSalePeriodCheck() {
+      // when
+      Throwable thrown =
+          catchThrowable(
+              () ->
+                  performance.update(
+                      "공연",
+                      "공연장",
+                      PERFORMANCE_AT,
+                      50_000,
+                      SALE_START_AT,
+                      SALE_START_AT,
+                      false,
+                      PERFORMANCE_AT));
+
+      // then
+      assertErrorCode(thrown, ErrorCode.PERFORMANCE_ALREADY_STARTED);
     }
 
     @Test
@@ -170,7 +203,15 @@ class PerformanceTest {
       SalePeriod salePeriod = new SalePeriod(SALE_START_AT.plusDays(1), SALE_END_AT.minusDays(1));
 
       // when
-      performance.update("새 공연", "새 공연장", performanceAt, 60_000, salePeriod, false, NOW);
+      performance.update(
+          "새 공연",
+          "새 공연장",
+          performanceAt,
+          60_000,
+          salePeriod.saleStartAt(),
+          salePeriod.saleEndAt(),
+          false,
+          NOW);
 
       // then
       assertThat(performance.getTitle()).isEqualTo("새 공연");
@@ -188,7 +229,15 @@ class PerformanceTest {
       SalePeriod salePeriod = new SalePeriod(SALE_START_AT, now.plusSeconds(30));
 
       // when
-      performance.update("새 공연", "새 공연장", PERFORMANCE_AT, 60_000, salePeriod, true, now);
+      performance.update(
+          "새 공연",
+          "새 공연장",
+          PERFORMANCE_AT,
+          60_000,
+          salePeriod.saleStartAt(),
+          salePeriod.saleEndAt(),
+          true,
+          now);
 
       // then
       assertThat(performance.getTitle()).isEqualTo("새 공연");
@@ -222,14 +271,26 @@ class PerformanceTest {
         SalePeriod salePeriod,
         boolean hasReservation,
         LocalDateTime now) {
-      performance.update("공연", "공연장", performanceAt, 50_000, salePeriod, hasReservation, now);
+      performance.update(
+          "공연",
+          "공연장",
+          performanceAt,
+          50_000,
+          salePeriod.saleStartAt(),
+          salePeriod.saleEndAt(),
+          hasReservation,
+          now);
     }
   }
 
-  private Performance create(
-      LocalDateTime performanceAt, LocalDateTime saleStartAt, LocalDateTime saleEndAt) {
+  private Performance create(LocalDateTime saleStartAt, LocalDateTime saleEndAt) {
     return Performance.create(
-        "공연", "공연장", performanceAt, 50_000, new SalePeriod(saleStartAt, saleEndAt), NOW);
+        "공연",
+        "공연장",
+        PerformanceTest.PERFORMANCE_AT,
+        50_000,
+        new SalePeriod(saleStartAt, saleEndAt),
+        NOW);
   }
 
   private void assertErrorCode(Throwable thrown, ErrorCode errorCode) {

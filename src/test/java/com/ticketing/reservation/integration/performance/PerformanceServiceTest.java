@@ -3,6 +3,7 @@ package com.ticketing.reservation.integration.performance;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
@@ -26,9 +27,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -37,6 +43,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 class PerformanceServiceTest {
+
+  private static final int RESERVED_QUANTITY = 30;
 
   @Autowired private PerformanceService performanceService;
   @Autowired private PerformanceRepository performanceRepository;
@@ -128,14 +136,23 @@ class PerformanceServiceTest {
     assertThat(saved.getTitle()).isEqualTo("공연");
   }
 
-  @Test
-  @DisplayName("공연 일시가 지난 공연이면 총 판매 수량 오류보다 공연 시작 오류를 먼저 반환한다")
-  void rejectsStartedPerformanceBeforeQuantityCheck() {
+  @ParameterizedTest(name = "{0}")
+  @DisplayName("여러 오류가 함께 해당하면 우선순위가 높은 오류를 반환한다")
+  @MethodSource("conflictingErrors")
+  void returnsHigherPriorityErrorWhenErrorsConflict(
+      String situation,
+      PerformanceState state,
+      int reservedQuantity,
+      UnaryOperator<PerformanceRequestBuilder> requestModifier,
+      ErrorCode expected) {
     // given
     LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-    Performance performance = save("공연", now.minusDays(3), now.minusDays(2), 100);
-    reserve(performance, 30);
-    PerformanceRequest request = requestFor(performance).totalQuantity(29).build();
+    Performance performance =
+        state == PerformanceState.STARTED
+            ? save("공연", now.minusDays(3), now.minusDays(2), 100)
+            : save("공연", now.plusDays(1), now.plusDays(10), 100);
+    reserve(performance, reservedQuantity);
+    PerformanceRequest request = requestModifier.apply(requestFor(performance)).build();
 
     // when
     Throwable thrown =
@@ -147,30 +164,41 @@ class PerformanceServiceTest {
     // then
     assertThat(thrown)
         .isInstanceOfSatisfying(
-            BusinessException.class,
-            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PERFORMANCE_ALREADY_STARTED));
+            BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(expected));
   }
 
-  @Test
-  @DisplayName("공연 일시가 지난 공연이라도 판매 기간이 유효하지 않으면 판매 기간 오류를 반환한다")
-  void rejectsInvalidSalePeriodBeforeStartedCheck() {
-    // given
-    LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-    Performance performance = save("공연", now.minusDays(3), now.minusDays(2), 100);
-    PerformanceRequest request = requestFor(performance).invalidSalePeriod().build();
+  static Stream<Arguments> conflictingErrors() {
+    return Stream.of(
+        arguments(
+            "시작한 공연 + 예약보다 적은 총 수량 → 공연 시작 오류",
+            PerformanceState.STARTED,
+            RESERVED_QUANTITY,
+            modifyRequest(request -> request.totalQuantity(RESERVED_QUANTITY - 1)),
+            ErrorCode.PERFORMANCE_ALREADY_STARTED),
+        arguments(
+            "예약 있는 공연의 일정 변경 + 예약보다 적은 총 수량 → 일정 변경 불가 오류",
+            PerformanceState.NOT_STARTED,
+            RESERVED_QUANTITY,
+            modifyRequest(
+                request -> request.delayPerformanceAt().totalQuantity(RESERVED_QUANTITY - 1)),
+            ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED),
+        arguments(
+            "잘못된 판매 기간 + 예약보다 적은 총 수량 → 판매 기간 오류",
+            PerformanceState.NOT_STARTED,
+            RESERVED_QUANTITY,
+            modifyRequest(
+                request -> request.invalidSalePeriod().totalQuantity(RESERVED_QUANTITY - 1)),
+            ErrorCode.INVALID_SALE_PERIOD));
+  }
 
-    // when
-    Throwable thrown =
-        catchThrowable(
-            () ->
-                performanceService.update(
-                    performance.getId(), request, ifMatch(performance.getVersion())));
+  private static UnaryOperator<PerformanceRequestBuilder> modifyRequest(
+      UnaryOperator<PerformanceRequestBuilder> modifier) {
+    return modifier;
+  }
 
-    // then
-    assertThat(thrown)
-        .isInstanceOfSatisfying(
-            BusinessException.class,
-            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_SALE_PERIOD));
+  private enum PerformanceState {
+    STARTED,
+    NOT_STARTED
   }
 
   @Test
