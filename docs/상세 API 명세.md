@@ -1,7 +1,7 @@
 # 티켓팅 서비스 상세 API 명세
 
-> `API 목록.md`의 API별 요청·응답 형식과 오류 응답을 정의합니다.
-> 기능별 동작 규칙은 `기능정의서.md`를 따르며, 해당 항목 번호를 표기합니다.
+> [API 목록](API%20목록.md)의 API별 요청·응답 형식과 오류 응답을 정의합니다.
+> 기능별 동작 규칙은 [기능정의서](기능정의서.md)를 따르며, 해당 항목 번호를 표기합니다.
 > API는 구현 시점에 이 문서에 추가합니다.
 
 ## 1. 공통 규칙
@@ -52,6 +52,8 @@
 | `SCHEDULE_CHANGE_NOT_ALLOWED` | 409 | 예약이 있는 공연은 공연 일시와 판매 시작 일시를 변경할 수 없습니다. |
 | `PERFORMANCE_ALREADY_STARTED` | 409 | 공연 일시가 지난 공연은 수정할 수 없습니다. |
 | `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량은 예약된 수량보다 적을 수 없습니다. |
+| `PERFORMANCE_MODIFIED` | 412 | 공연 정보가 변경되었습니다. 최신 정보를 다시 조회한 뒤 수정해 주세요. |
+| `IF_MATCH_REQUIRED` | 428 | If-Match 헤더에 조회 시 받은 ETag 하나를 포함해야 합니다. |
 
 ### 1.3. 인증
 
@@ -71,6 +73,7 @@ Authorization: Bearer {accessToken}
 | 로그인 세션 무효화 여부를 확인할 수 없음 (토큰 저장소 장애) | 503 | `AUTH_STORE_UNAVAILABLE` | 없음 |
 
 - 인증이 필요한 API는 모두 위 표의 오류를 반환할 수 있습니다. API별 오류 표에는 이 오류를 반복해 적지 않고, 해당 API에서만 발생하는 오류만 적습니다.
+- 위 표의 오류는 요청값 형식 오류를 포함한 API별 오류보다 먼저 판정합니다. 인증은 요청 본문을 읽기 전에 확인하기 때문입니다.
 - 액세스 토큰 만료는 60초의 기본 허용 오차를 두고 판정합니다. 만료 시각(`exp`)이 지난 뒤 60초 이내의 토큰은 아직 유효한 것으로 처리합니다.
 - 인증이 필요 없는 API는 `Authorization` 헤더를 확인하지 않습니다. 만료된 토큰을 붙여 호출해도 거절되지 않습니다.
 
@@ -275,6 +278,14 @@ Authorization: Bearer {accessToken}
 
 #### 응답: `201 Created`
 
+**헤더**
+
+| 헤더 | 설명 |
+|---|---|
+| `ETag` | 공연 정보 버전을 따옴표로 감싼 값 (예: `"0"`)<br>등록 시 `"0"`이며 수정할 때마다 1씩 증가합니다(4.8.1.5).<br>공연 정보 수정(4.4) 요청의 `If-Match`에 그대로 보냅니다. |
+
+**본문**
+
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | number | 공연 식별자 |
@@ -287,7 +298,13 @@ Authorization: Bearer {accessToken}
 | `saleStartAt` | string | 판매 시작 일시 |
 | `saleEndAt` | string | 판매 종료 일시 |
 
-```json
+**예시**
+
+```http
+HTTP/1.1 201 Created
+Content-Type: application/json
+ETag: "0"
+
 {
   "id": 1,
   "title": "콘서트1",
@@ -322,7 +339,7 @@ Authorization: Bearer {accessToken}
 
 #### 응답: `200 OK`
 
-공연 등록 응답(4.1)과 같습니다.
+공연 등록 응답(4.1)과 같습니다. `ETag` 헤더를 포함합니다.
 
 #### 오류
 
@@ -395,14 +412,28 @@ Authorization: Bearer {accessToken}
 | 필드 | 위치 | 타입 | 필수 | 설명 |
 |---|---|---|---|---|
 | `performanceId` | path | number | O | 공연 식별자 |
+| `If-Match` | header | string | O | 수정의 기준이 된 공연 정보의 `ETag`. 공연 상세 조회(4.2) 또는 직전 수정 응답의 `ETag`를 그대로 보냅니다(4.8.1.5). |
 
 본문은 공연 등록 요청(4.1)과 같습니다. 바꾸지 않는 항목도 기존 값으로 모두 보냅니다.
 
+```http
+PUT /api/v1/performances/1
+If-Match: "0"
+```
+
 - 공연 일시, 판매 시작 일시, 판매 종료 일시는 기존 값과 다를 때만 현재 시각과 비교합니다(4.8.1.2). 이미 판매가 시작된 공연도 판매 시작 일시를 그대로 보내면 수정할 수 있습니다.
+- `If-Match`에는 조회할 때 받은 `ETag` 하나를 그대로 보냅니다. 수정의 기준이 된 버전 하나를 알 수 있어야 하므로, 형식에 맞는 ETag가 정확히 하나가 아니면 헤더가 없는 것과 같이 `IF_MATCH_REQUIRED`로 거절합니다.
+  - 0개: 비어 있거나 형식이 맞지 않는 값 (예: 따옴표가 없는 `0`)
+  - 2개 이상: 여러 ETag를 쉼표로 나열한 값
+  - `*`: ETag가 아니라 "아무 버전"을 뜻하는 기호라서 거절합니다.
+  - 형식이 맞지 않는 값은 무시하므로 `"0", 0`은 `"0"` 하나로 봅니다.
+- 비교는 [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1)의 강한 비교를 따릅니다. 약한 ETag(`W/"0"`)는 현재 `ETag`와 일치하지 않는 것으로 봅니다.
+- 현재 `ETag`와 일치하지 않으면 다른 수정이 먼저 반영된 것이므로 거절합니다. 공연을 다시 조회해 최신 정보와 `ETag`로 다시 요청합니다.
+- 같은 공연에 대한 수정 요청은 하나씩 처리합니다. 같은 `ETag`로 동시에 요청하면 먼저 처리된 요청만 반영되고 나머지는 `PERFORMANCE_MODIFIED`로 거절됩니다.
 
 #### 응답: `200 OK`
 
-공연 등록 응답(4.1)과 같습니다. 단, `remainingQuantity`는 수정한 총 판매 수량에서 예약 수량을 뺀 값입니다.
+공연 등록 응답(4.1)과 같습니다. 단, `remainingQuantity`는 수정한 총 판매 수량에서 예약 수량을 뺀 값이고, `ETag`는 수정 전보다 1 증가한 버전입니다.
 
 #### 오류
 
@@ -418,15 +449,18 @@ Authorization: Bearer {accessToken}
 | `SCHEDULE_CHANGE_NOT_ALLOWED` | 409 | 예약이 있는데 공연 일시 또는 판매 시작 일시를 바꿈 |
 | `PERFORMANCE_ALREADY_STARTED` | 409 | 공연이 이미 시작됨 |
 | `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량이 이미 예약된 수량보다 적음 |
+| `PERFORMANCE_MODIFIED` | 412 | `If-Match`가 현재 공연 정보의 `ETag`와 일치하지 않음 (다른 수정이 먼저 반영됨) |
+| `IF_MATCH_REQUIRED` | 428 | `If-Match` 헤더가 없거나, `*`이거나, 형식에 맞는 ETag가 정확히 하나가 아님 |
 
-오류가 여러 개 해당하면 아래 순서에서 먼저 걸리는 오류를 반환합니다.
+오류가 여러 개 해당하면 아래 우선순위가 높은(숫자가 작은) 그룹의 오류를 먼저 반환합니다.
 
-| 순서 | 오류 | 근거 |
+| 우선순위 | 오류 그룹 | 오류 |
 |---|---|---|
-| 1 | 요청값 형식 오류 (`400`, 코드 없음) | 요청을 해석할 수 없음 |
-| 2 | `PERFORMANCE_NOT_FOUND` | 수정할 공연이 없음 |
-| 3 | `INVALID_SALE_PERIOD` | 공연 상태와 관계없이 성립하지 않는 요청 |
-| 4 | `PERFORMANCE_ALREADY_STARTED` | 시작한 공연은 어떤 항목도 수정할 수 없음 |
-| 5 | `SCHEDULE_CHANGE_NOT_ALLOWED` | 예약이 있으면 일정을 바꿀 수 없음 |
-| 6 | `INVALID_PERFORMANCE_AT`, `INVALID_SALE_START_AT`, `INVALID_SALE_END_AT`, `SALE_END_AFTER_PERFORMANCE` | 일시 값 검증 |
-| 7 | `TOTAL_QUANTITY_BELOW_RESERVED` | 총 판매 수량 검증 |
+| 1 | 요청 파싱·형식 오류 | 요청값 형식 오류 (`400`, 코드 없음) |
+| 2 | 요청 선결 조건 | `IF_MATCH_REQUIRED` |
+| 3 | 대상 리소스 확인 | `PERFORMANCE_NOT_FOUND` |
+| 4 | 동시성 충돌 | `PERFORMANCE_MODIFIED` |
+| 5 | 상태 기반 업무 규칙 | `PERFORMANCE_ALREADY_STARTED` → `SCHEDULE_CHANGE_NOT_ALLOWED` |
+| 6 | 날짜 값 검증 | `INVALID_SALE_PERIOD`, `INVALID_SALE_START_AT`, `INVALID_SALE_END_AT`, `INVALID_PERFORMANCE_AT`, `SALE_END_AFTER_PERFORMANCE` |
+| 7 | 예약 수량에 기대는 검증 | `TOTAL_QUANTITY_BELOW_RESERVED` |
+

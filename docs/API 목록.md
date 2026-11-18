@@ -19,7 +19,7 @@
 | 2 | 공연 등록 | POST | `/performances` | Body: 공연명, 공연 일시, 판매 기간, 판매 수량, 가격 등 | 생성된 공연 정보 | 관리자 |
 | 2 | 공연 목록 조회 | GET | `/performances` | Query: `available` (선택) | 공연 목록(공연명, 공연 장소, 공연 일시, 가격, 잔여 수량) | 불필요 |
 | 2 | 공연 상세 조회 | GET | `/performances/{performanceId}` | Path: 공연 식별자 | 공연 상세 정보 | 불필요 |
-| 2 | 공연 정보 수정 | PUT | `/performances/{performanceId}` | Path: 공연 식별자; Body: 수정할 공연의 전체 정보 | 수정된 공연 정보 | 관리자 |
+| 2 | 공연 정보 수정 | PUT | `/performances/{performanceId}` | Path: 공연 식별자; Header: `If-Match`(조회 시 받은 ETag); Body: 수정할 공연의 전체 정보 | 수정된 공연 정보 | 관리자 |
 | 3 | 예약 신청 | POST | `/reservations` | Body: 공연 식별자, 예약 수량 | 예약 정보(예약 번호, 상태, 수량, 결제 기한, 결제 금액 등) | 회원 |
 | 3 | 내 예약 목록 조회 | GET | `/reservations` | 별도 파라미터 없음(초안) | 본인의 예약 목록(공연 요약, 상태, 수량, 금액, 예약 시각 등) | 회원 |
 | 3 | 예약 상세 조회 | GET | `/reservations/{reservationId}` | Path: 예약 식별자 | 예약 상세 정보 및 상태 | 회원(본인 예약) |
