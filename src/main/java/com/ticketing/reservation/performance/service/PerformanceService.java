@@ -2,6 +2,7 @@ package com.ticketing.reservation.performance.service;
 
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
+import com.ticketing.reservation.global.web.IfMatch;
 import com.ticketing.reservation.performance.domain.Performance;
 import com.ticketing.reservation.performance.domain.PerformanceDetail;
 import com.ticketing.reservation.performance.domain.PerformanceStock;
@@ -52,8 +53,14 @@ public class PerformanceService {
   }
 
   @Transactional
-  public PerformanceDetail update(Long performanceId, PerformanceRequest request) {
-    Performance performance = findPerformance(performanceId);
+  public PerformanceDetail update(Long performanceId, PerformanceRequest request, IfMatch ifMatch) {
+    Performance performance =
+        performanceRepository
+            .findByIdForUpdate(performanceId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.PERFORMANCE_NOT_FOUND));
+    if (!ifMatch.matches(performance.getVersion())) {
+      throw new BusinessException(ErrorCode.PERFORMANCE_MODIFIED);
+    }
     PerformanceStock stock = findStock(performanceId);
     performance.update(
         request.title(),

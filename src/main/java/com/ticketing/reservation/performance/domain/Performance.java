@@ -29,6 +29,8 @@ public class Performance {
 
   @Embedded private SalePeriod salePeriod;
 
+  private long version;
+
   protected Performance() {}
 
   private Performance(
@@ -86,6 +88,7 @@ public class Performance {
     this.performanceAt = performanceAt;
     this.price = price;
     this.salePeriod = salePeriod;
+    this.version++;
   }
 
   private static void validateSaleStartAt(SalePeriod salePeriod, LocalDateTime now) {
@@ -119,6 +122,10 @@ public class Performance {
 
   public int getPrice() {
     return price;
+  }
+
+  public long getVersion() {
+    return version;
   }
 
   public SalePeriod getSalePeriod() {

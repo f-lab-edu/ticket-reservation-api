@@ -197,6 +197,26 @@ class PerformanceTest {
       assertThat(performance.getSalePeriod()).isEqualTo(salePeriod);
     }
 
+    @Test
+    @DisplayName("공연 정보를 수정하면 버전이 1 올라간다")
+    void increasesVersionOnUpdate() {
+      // when
+      update(PERFORMANCE_AT, SALE_PERIOD, false, NOW);
+
+      // then
+      assertThat(performance.getVersion()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("수정 검증에 실패하면 버전이 바뀌지 않는다")
+    void keepsVersionWhenUpdateIsRejected() {
+      // when
+      catchThrowable(() -> update(PERFORMANCE_AT, SALE_PERIOD, false, PERFORMANCE_AT));
+
+      // then
+      assertThat(performance.getVersion()).isZero();
+    }
+
     private void update(
         LocalDateTime performanceAt,
         SalePeriod salePeriod,
