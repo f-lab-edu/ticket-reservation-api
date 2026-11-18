@@ -108,12 +108,8 @@ class PerformanceTest {
           catchThrowable(
               () ->
                   performance.update(
-                      "공연",
-                      "공연장",
-                      PERFORMANCE_AT,
-                      50_000,
-                      SALE_START_AT,
-                      SALE_START_AT,
+                      new PerformanceUpdate(
+                          "공연", "공연장", PERFORMANCE_AT, 50_000, SALE_START_AT, SALE_START_AT),
                       false,
                       PERFORMANCE_AT));
 
@@ -204,12 +200,13 @@ class PerformanceTest {
 
       // when
       performance.update(
-          "새 공연",
-          "새 공연장",
-          performanceAt,
-          60_000,
-          salePeriod.saleStartAt(),
-          salePeriod.saleEndAt(),
+          new PerformanceUpdate(
+              "새 공연",
+              "새 공연장",
+              performanceAt,
+              60_000,
+              salePeriod.saleStartAt(),
+              salePeriod.saleEndAt()),
           false,
           NOW);
 
@@ -230,12 +227,13 @@ class PerformanceTest {
 
       // when
       performance.update(
-          "새 공연",
-          "새 공연장",
-          PERFORMANCE_AT,
-          60_000,
-          salePeriod.saleStartAt(),
-          salePeriod.saleEndAt(),
+          new PerformanceUpdate(
+              "새 공연",
+              "새 공연장",
+              PERFORMANCE_AT,
+              60_000,
+              salePeriod.saleStartAt(),
+              salePeriod.saleEndAt()),
           true,
           now);
 
@@ -272,12 +270,8 @@ class PerformanceTest {
         boolean hasReservation,
         LocalDateTime now) {
       performance.update(
-          "공연",
-          "공연장",
-          performanceAt,
-          50_000,
-          salePeriod.saleStartAt(),
-          salePeriod.saleEndAt(),
+          new PerformanceUpdate(
+              "공연", "공연장", performanceAt, 50_000, salePeriod.saleStartAt(), salePeriod.saleEndAt()),
           hasReservation,
           now);
     }

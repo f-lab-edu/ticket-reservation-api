@@ -2,6 +2,7 @@ package com.ticketing.reservation.performance.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.ticketing.reservation.performance.domain.Performance;
+import com.ticketing.reservation.performance.domain.PerformanceUpdate;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -19,4 +20,8 @@ public record PerformanceRequest(
     @NotNull @JsonFormat(pattern = DATE_TIME_PATTERN) LocalDateTime saleEndAt) {
 
   private static final String DATE_TIME_PATTERN = "uuuu-MM-dd'T'HH:mm:ss";
+
+  public PerformanceUpdate toPerformanceUpdate() {
+    return new PerformanceUpdate(title, venue, performanceAt, price, saleStartAt, saleEndAt);
+  }
 }

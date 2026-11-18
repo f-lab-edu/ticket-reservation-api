@@ -63,14 +63,7 @@ public class PerformanceService {
     }
     PerformanceStock stock = findStock(performanceId);
     performance.update(
-        request.title(),
-        request.venue(),
-        request.performanceAt(),
-        request.price(),
-        request.saleStartAt(),
-        request.saleEndAt(),
-        stock.hasReservation(),
-        LocalDateTime.now(clock));
+        request.toPerformanceUpdate(), stock.hasReservation(), LocalDateTime.now(clock));
     stock.changeTotalQuantity(request.totalQuantity());
     return new PerformanceDetail(performance, stock);
   }

@@ -70,38 +70,30 @@ public class Performance {
     }
   }
 
-  public void update(
-      String title,
-      String venue,
-      LocalDateTime performanceAt,
-      int price,
-      LocalDateTime saleStartAt,
-      LocalDateTime saleEndAt,
-      boolean hasReservation,
-      LocalDateTime now) {
-    validateUpdatable(performanceAt, saleStartAt, hasReservation, now);
+  public void update(PerformanceUpdate changes, boolean hasReservation, LocalDateTime now) {
+    validateUpdatable(changes.performanceAt(), changes.saleStartAt(), hasReservation, now);
 
-    SalePeriod salePeriod = new SalePeriod(saleStartAt, saleEndAt);
-    boolean performanceAtChanged = !performanceAt.isEqual(this.performanceAt);
-    boolean saleStartChanged = !saleStartAt.isEqual(this.salePeriod.saleStartAt());
-    boolean saleEndChanged = !saleEndAt.isEqual(this.salePeriod.saleEndAt());
+    SalePeriod newSalePeriod = new SalePeriod(changes.saleStartAt(), changes.saleEndAt());
+    boolean performanceAtChanged = !changes.performanceAt().isEqual(this.performanceAt);
+    boolean saleStartChanged = !newSalePeriod.saleStartAt().isEqual(this.salePeriod.saleStartAt());
+    boolean saleEndChanged = !newSalePeriod.saleEndAt().isEqual(this.salePeriod.saleEndAt());
 
-    if (performanceAtChanged && !performanceAt.isAfter(now)) {
+    if (performanceAtChanged && !changes.performanceAt().isAfter(now)) {
       throw new BusinessException(ErrorCode.INVALID_PERFORMANCE_AT);
     }
     if (saleStartChanged) {
-      validateSaleStartAt(salePeriod, now);
+      validateSaleStartAt(newSalePeriod, now);
     }
-    if (saleEndChanged && !salePeriod.saleEndAt().isAfter(now)) {
+    if (saleEndChanged && !newSalePeriod.saleEndAt().isAfter(now)) {
       throw new BusinessException(ErrorCode.INVALID_SALE_END_AT);
     }
-    validateSaleEndBeforePerformance(salePeriod, performanceAt);
+    validateSaleEndBeforePerformance(newSalePeriod, changes.performanceAt());
 
-    this.title = title;
-    this.venue = venue;
-    this.performanceAt = performanceAt;
-    this.price = price;
-    this.salePeriod = salePeriod;
+    this.title = changes.title();
+    this.venue = changes.venue();
+    this.performanceAt = changes.performanceAt();
+    this.price = changes.price();
+    this.salePeriod = newSalePeriod;
     this.version++;
   }
 
