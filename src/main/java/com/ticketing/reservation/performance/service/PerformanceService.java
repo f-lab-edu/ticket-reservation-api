@@ -5,9 +5,8 @@ import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.global.web.IfMatch;
 import com.ticketing.reservation.performance.domain.Performance;
 import com.ticketing.reservation.performance.domain.PerformanceDetail;
+import com.ticketing.reservation.performance.domain.PerformanceInfo;
 import com.ticketing.reservation.performance.domain.PerformanceStock;
-import com.ticketing.reservation.performance.domain.SalePeriod;
-import com.ticketing.reservation.performance.dto.PerformanceRequest;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import com.ticketing.reservation.performance.repository.PerformanceStockRepository;
 import java.time.Clock;
@@ -37,23 +36,17 @@ public class PerformanceService {
   }
 
   @Transactional
-  public PerformanceDetail register(PerformanceRequest request) {
+  public PerformanceDetail register(PerformanceInfo info, int totalQuantity) {
     Performance performance =
-        performanceRepository.save(
-            Performance.create(
-                request.title(),
-                request.venue(),
-                request.performanceAt(),
-                request.price(),
-                new SalePeriod(request.saleStartAt(), request.saleEndAt()),
-                LocalDateTime.now(clock)));
+        performanceRepository.save(Performance.create(info, LocalDateTime.now(clock)));
     PerformanceStock stock =
-        stockRepository.save(PerformanceStock.create(performance.getId(), request.totalQuantity()));
+        stockRepository.save(PerformanceStock.create(performance.getId(), totalQuantity));
     return new PerformanceDetail(performance, stock);
   }
 
   @Transactional
-  public PerformanceDetail update(Long performanceId, PerformanceRequest request, IfMatch ifMatch) {
+  public PerformanceDetail update(
+      Long performanceId, PerformanceInfo info, int totalQuantity, IfMatch ifMatch) {
     Performance performance =
         performanceRepository
             .findByIdForUpdate(performanceId)
@@ -62,9 +55,8 @@ public class PerformanceService {
       throw new BusinessException(ErrorCode.PERFORMANCE_MODIFIED);
     }
     PerformanceStock stock = findStock(performanceId);
-    performance.update(
-        request.toPerformanceUpdate(), stock.hasReservation(), LocalDateTime.now(clock));
-    stock.changeTotalQuantity(request.totalQuantity());
+    performance.update(info, stock.hasReservation(), LocalDateTime.now(clock));
+    stock.changeTotalQuantity(totalQuantity);
     return new PerformanceDetail(performance, stock);
   }
 

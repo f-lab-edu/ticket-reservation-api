@@ -2,7 +2,7 @@ package com.ticketing.reservation.performance.domain;
 
 import java.time.LocalDateTime;
 
-public record PerformanceUpdate(
+public record PerformanceInfo(
     String title,
     String venue,
     LocalDateTime performanceAt,
