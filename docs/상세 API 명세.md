@@ -8,6 +8,7 @@
 
 - Base path: `/api/v1`
 - 요청·응답 본문은 JSON을 사용합니다.
+- 요청 본문의 `integer` 필드에 소수점이 있는 숫자(예: `1.5`, `1.0`)를 보내면 `400`으로 거절합니다.
 
 ### 1.1. 오류 응답
 
@@ -127,7 +128,7 @@ Authorization: Bearer {accessToken}
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
-| `id` | number | 회원 식별자 |
+| `id` | integer | 회원 식별자 |
 | `email` | string | 정규화된 이메일 (4.1.2) |
 | `role` | string | 회원 권한 (`USER`) |
 
@@ -172,7 +173,7 @@ Authorization: Bearer {accessToken}
 |---|---|---|
 | `tokenType` | string | 항상 `Bearer` |
 | `accessToken` | string | 액세스 토큰 (JWT). 회원 식별자(`sub`)와 권한(`role`)을 포함 |
-| `expiresIn` | number | 액세스 토큰 유효 시간(초), `1800` |
+| `expiresIn` | integer | 액세스 토큰 유효 시간(초), `1800` |
 | `refreshToken` | string | 리프레시 토큰 (불투명 난수 문자열, 유효기간 7일) |
 
 ```json
@@ -259,8 +260,8 @@ Authorization: Bearer {accessToken}
 | `title` | string | O | 공연명 (공백만으로 구성할 수 없음, 100자 이하) |
 | `venue` | string | O | 공연 장소 (공백만으로 구성할 수 없음, 100자 이하) |
 | `performanceAt` | string | O | 공연 일시 |
-| `price` | number | O | 티켓 가격 (0 이상, 4.4.1.2.1) |
-| `totalQuantity` | number | O | 총 판매 수량 (1 이상, 4.4.1.2.2) |
+| `price` | integer | O | 티켓 가격 (0 이상, 4.4.1.2.1) |
+| `totalQuantity` | integer | O | 총 판매 수량 (1 이상, 4.4.1.2.2) |
 | `saleStartAt` | string | O | 판매 시작 일시 (4.4.1.2.3) |
 | `saleEndAt` | string | O | 판매 종료 일시 (4.4.1.2.4, 4.4.1.2.5) |
 
@@ -288,13 +289,13 @@ Authorization: Bearer {accessToken}
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
-| `id` | number | 공연 식별자 |
+| `id` | integer | 공연 식별자 |
 | `title` | string | 공연명 |
 | `venue` | string | 공연 장소 |
 | `performanceAt` | string | 공연 일시 |
-| `price` | number | 티켓 가격 |
-| `totalQuantity` | number | 총 판매 수량 |
-| `remainingQuantity` | number | 잔여 판매 수량 (등록 시 총 판매 수량과 같음, 4.4.1.3) |
+| `price` | integer | 티켓 가격 |
+| `totalQuantity` | integer | 총 판매 수량 |
+| `remainingQuantity` | integer | 잔여 판매 수량 (등록 시 총 판매 수량과 같음, 4.4.1.3) |
 | `saleStartAt` | string | 판매 시작 일시 |
 | `saleEndAt` | string | 판매 종료 일시 |
 
@@ -335,7 +336,7 @@ ETag: "0"
 
 | 파라미터 | 위치 | 타입 | 필수 | 설명 |
 |---|---|---|---|---|
-| `performanceId` | path | number | O | 공연 식별자 |
+| `performanceId` | path | integer | O | 공연 식별자 |
 
 #### 응답: `200 OK`
 
@@ -375,12 +376,12 @@ ETag: "0"
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `performances` | array | 공연 목록. 조건에 맞는 공연이 없으면 빈 배열 |
-| `performances[].id` | number | 공연 식별자 |
+| `performances[].id` | integer | 공연 식별자 |
 | `performances[].title` | string | 공연명 |
 | `performances[].venue` | string | 공연 장소 |
 | `performances[].performanceAt` | string | 공연 일시 |
-| `performances[].price` | number | 티켓 가격 |
-| `performances[].remainingQuantity` | number | 잔여 판매 수량 |
+| `performances[].price` | integer | 티켓 가격 |
+| `performances[].remainingQuantity` | integer | 잔여 판매 수량 |
 
 ```json
 {
@@ -411,7 +412,7 @@ ETag: "0"
 
 | 필드 | 위치 | 타입 | 필수 | 설명 |
 |---|---|---|---|---|
-| `performanceId` | path | number | O | 공연 식별자 |
+| `performanceId` | path | integer | O | 공연 식별자 |
 | `If-Match` | header | string | O | 수정의 기준이 된 공연 정보의 `ETag`. 공연 상세 조회(4.2) 응답의 `ETag`를 그대로 보냅니다(4.8.1.5). |
 
 본문은 공연 등록 요청(4.1)과 같습니다. 바꾸지 않는 항목도 기존 값으로 모두 보냅니다.

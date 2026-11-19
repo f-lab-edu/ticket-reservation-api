@@ -160,6 +160,7 @@ class PerformanceControllerTest {
           arguments("performanceAt", "2026-12-20T19:00:00.5"),
           arguments("price", null),
           arguments("price", -1),
+          arguments("price", 50000.5),
           arguments("totalQuantity", null),
           arguments("totalQuantity", 0),
           arguments("saleStartAt", null),
