@@ -43,7 +43,9 @@ public class SecurityConfig {
           PATH.matcher(HttpMethod.GET, ApiPaths.V1 + "/performances/{performanceId}"));
 
   private static final RequestMatcher ADMIN_ENDPOINTS =
-      PATH.matcher(HttpMethod.POST, ApiPaths.V1 + "/performances");
+      new OrRequestMatcher(
+          PATH.matcher(HttpMethod.POST, ApiPaths.V1 + "/performances"),
+          PATH.matcher(HttpMethod.PUT, ApiPaths.V1 + "/performances/{performanceId}"));
 
   @Bean
   public SecurityFilterChain securityFilterChain(

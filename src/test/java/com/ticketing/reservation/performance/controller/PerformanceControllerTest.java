@@ -2,11 +2,15 @@ package com.ticketing.reservation.performance.controller;
 
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -18,6 +22,7 @@ import com.ticketing.reservation.auth.token.AccessTokenProvider;
 import com.ticketing.reservation.global.config.SecurityConfig;
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
+import com.ticketing.reservation.global.web.IfMatch;
 import com.ticketing.reservation.member.domain.Member;
 import com.ticketing.reservation.member.domain.MemberRole;
 import com.ticketing.reservation.performance.domain.Performance;
@@ -107,7 +112,8 @@ class PerformanceControllerTest {
           .andExpect(jsonPath("$.totalQuantity").value(100))
           .andExpect(jsonPath("$.remainingQuantity").value(70))
           .andExpect(jsonPath("$.saleStartAt").value("2026-12-01T10:00:00"))
-          .andExpect(jsonPath("$.saleEndAt").value("2026-12-19T18:00:00"));
+          .andExpect(jsonPath("$.saleEndAt").value("2026-12-19T18:00:00"))
+          .andExpect(header().string(HttpHeaders.ETAG, strongETag(0)));
     }
 
     @ParameterizedTest(name = "{0}: {1}")
@@ -184,7 +190,10 @@ class PerformanceControllerTest {
       ResultActions result = mockMvc.perform(get("/api/v1/performances/1"));
 
       // then
-      result.andExpect(status().isOk()).andExpect(jsonPath("$.id").value(1));
+      result
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.id").value(1))
+          .andExpect(header().string(HttpHeaders.ETAG, strongETag(0)));
     }
 
     @Test
@@ -202,6 +211,94 @@ class PerformanceControllerTest {
           .andExpect(status().isNotFound())
           .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
           .andExpect(jsonPath("$.code").value("PERFORMANCE_NOT_FOUND"));
+    }
+  }
+
+  @Nested
+  @DisplayName("공연 정보 수정")
+  class Update {
+
+    private static final String IF_MATCH = "\"3\"";
+
+    @Test
+    @DisplayName("수정에 성공하면 200과 공연 정보를 반환하고 ETag는 보내지 않는다")
+    void returnsOkWithPerformanceWhenSucceeds() throws Exception {
+      // given
+      PerformanceDetail updated = detail(1L);
+      ReflectionTestUtils.setField(updated.performance(), "version", 4L);
+      given(
+              performanceService.update(
+                  eq(1L), any(PerformanceRequest.class), argThat(ifMatch -> ifMatch.matches(3L))))
+          .willReturn(updated);
+
+      // when
+      ResultActions result = update(VALID_FIELDS);
+
+      // then
+      result
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.id").value(1))
+          .andExpect(header().doesNotExist(HttpHeaders.ETAG));
+    }
+
+    @Test
+    @DisplayName("요청값이 유효하지 않으면 400을 반환한다")
+    void returnsBadRequestWhenRequestIsInvalid() throws Exception {
+      // given
+      Map<String, Object> body = new HashMap<>(VALID_FIELDS);
+      body.put("totalQuantity", 0);
+
+      // when
+      ResultActions result = update(body);
+
+      // then
+      result.andExpect(status().isBadRequest());
+      then(performanceService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("If-Match 헤더가 없으면 428과 오류 코드를 반환한다")
+    void returnsPreconditionRequiredWithoutIfMatch() throws Exception {
+      // when
+      ResultActions result =
+          mockMvc.perform(
+              put("/api/v1/performances/1")
+                  .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(objectMapper.writeValueAsString(VALID_FIELDS)));
+
+      // then
+      result
+          .andExpect(status().isPreconditionRequired())
+          .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+          .andExpect(jsonPath("$.code").value("IF_MATCH_REQUIRED"));
+      then(performanceService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("다른 수정이 먼저 반영됐으면 412와 오류 코드를 반환한다")
+    void returnsPreconditionFailedWhenPerformanceWasModified() throws Exception {
+      // given
+      given(performanceService.update(eq(1L), any(PerformanceRequest.class), any(IfMatch.class)))
+          .willThrow(new BusinessException(ErrorCode.PERFORMANCE_MODIFIED));
+
+      // when
+      ResultActions result = update(VALID_FIELDS);
+
+      // then
+      result
+          .andExpect(status().isPreconditionFailed())
+          .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+          .andExpect(jsonPath("$.code").value("PERFORMANCE_MODIFIED"));
+    }
+
+    private ResultActions update(Map<String, Object> body) throws Exception {
+      return mockMvc.perform(
+          put("/api/v1/performances/1")
+              .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+              .header(HttpHeaders.IF_MATCH, IF_MATCH)
+              .contentType(MediaType.APPLICATION_JSON)
+              .content(objectMapper.writeValueAsString(body)));
     }
   }
 
@@ -243,6 +340,10 @@ class PerformanceControllerTest {
       // then
       result.andExpect(status().isOk()).andExpect(jsonPath("$.performances.length()").value(1));
     }
+  }
+
+  private static String strongETag(long version) {
+    return "\"" + version + "\"";
   }
 
   private static PerformanceDetail detail(Long id) {
