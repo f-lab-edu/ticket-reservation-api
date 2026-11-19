@@ -35,10 +35,36 @@ class IfMatchTest {
   }
 
   @ParameterizedTest(name = "If-Match: [{0}]")
-  @DisplayName("형식에 맞는 ETag가 정확히 하나가 아니면 거절한다")
+  @DisplayName("유효하지 않은 ETag는 제외하고 유효한 ETag만 비교한다")
+  @ValueSource(strings = {"\"3\", \"\"", "\"3\", \" \"", "\"3\", 3"})
+  void ignoresMalformedAndEmptyETags(String header) {
+    // when
+    IfMatch ifMatch = IfMatch.parse(header);
+
+    // then
+    assertThat(ifMatch.matches(3L)).isTrue();
+    assertThat(ifMatch.matches(4L)).isFalse();
+  }
+
+  @ParameterizedTest(name = "If-Match: [{0}]")
+  @DisplayName("유효한 ETag가 없거나 2개 이상이면 IF_MATCH_REQUIRED 예외가 발생한다")
   @NullSource
-  @ValueSource(strings = {"", " ", "*", "\"2\", \"3\"", "\"3\", *", "3"})
+  @ValueSource(strings = {"", " ", "\"\"", "\" \"", "3", "\"2\", \"3\""})
   void rejectsUnlessSingleETag(String header) {
+    // when
+    Throwable thrown = catchThrowable(() -> IfMatch.parse(header));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.IF_MATCH_REQUIRED));
+  }
+
+  @ParameterizedTest(name = "If-Match: [{0}]")
+  @DisplayName("와일드카드(*)가 들어 있으면 IF_MATCH_REQUIRED 예외가 발생한다")
+  @ValueSource(strings = {"*", "\"3\", *"})
+  void rejectsWildcard(String header) {
     // when
     Throwable thrown = catchThrowable(() -> IfMatch.parse(header));
 
