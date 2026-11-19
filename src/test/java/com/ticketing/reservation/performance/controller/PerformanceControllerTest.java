@@ -221,7 +221,7 @@ class PerformanceControllerTest {
     private static final String IF_MATCH = "\"3\"";
 
     @Test
-    @DisplayName("수정에 성공하면 200과 공연 정보, 새 ETag를 반환한다")
+    @DisplayName("수정에 성공하면 200과 공연 정보를 반환하고 ETag는 보내지 않는다")
     void returnsOkWithPerformanceWhenSucceeds() throws Exception {
       // given
       PerformanceDetail updated = detail(1L);
@@ -238,7 +238,7 @@ class PerformanceControllerTest {
       result
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.id").value(1))
-          .andExpect(header().string(HttpHeaders.ETAG, strongETag(4)));
+          .andExpect(header().doesNotExist(HttpHeaders.ETAG));
     }
 
     @Test

@@ -48,8 +48,9 @@ public class PerformanceController {
       @PathVariable Long performanceId,
       @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
       @Valid @RequestBody PerformanceRequest request) {
-    return withETag(
-        HttpStatus.OK, performanceService.update(performanceId, request, IfMatch.parse(ifMatch)));
+    return ResponseEntity.ok(
+        PerformanceDetailResponse.from(
+            performanceService.update(performanceId, request, IfMatch.parse(ifMatch))));
   }
 
   @GetMapping
