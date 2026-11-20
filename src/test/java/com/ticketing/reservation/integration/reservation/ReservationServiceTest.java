@@ -147,7 +147,7 @@ class ReservationServiceTest {
                       status -> {
                         stockRepository.findByIdForUpdate(performance.getId());
                         locked.countDown();
-                        awaitQuietly(release);
+                        awaitRelease(release);
                       }));
       locked.await();
 
@@ -227,7 +227,7 @@ class ReservationServiceTest {
     assertThat(results).containsExactlyInAnyOrder(true, false);
     PerformanceStock stock = stockRepository.findById(performance.getId()).orElseThrow();
     assertThat(stock.getRemainingQuantity()).isGreaterThanOrEqualTo(0);
-    boolean updateSucceeded = results.get(0);
+    boolean updateSucceeded = results.getFirst();
     if (updateSucceeded) {
       assertThat(stock.getTotalQuantity()).isEqualTo(80);
       assertThat(stock.getRemainingQuantity()).isZero();
@@ -270,7 +270,7 @@ class ReservationServiceTest {
     // then
     assertThat(results).containsExactlyInAnyOrder(true, false);
     Performance saved = performanceRepository.findById(performance.getId()).orElseThrow();
-    boolean updateSucceeded = results.get(0);
+    boolean updateSucceeded = results.getFirst();
     if (updateSucceeded) {
       assertThat(saved.getSalePeriod().saleStartAt()).isEqualTo(delayedSaleStartAt);
       assertThat(reservationRepository.count()).isZero();
@@ -306,11 +306,14 @@ class ReservationServiceTest {
                 BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(errorCode));
   }
 
-  private static void awaitQuietly(CountDownLatch latch) {
+  private static void awaitRelease(CountDownLatch latch) {
     try {
-      latch.await(LOCK_HOLD_LIMIT.toMillis(), TimeUnit.MILLISECONDS);
+      if (!latch.await(LOCK_HOLD_LIMIT.toMillis(), TimeUnit.MILLISECONDS)) {
+        throw new IllegalStateException("재고 락 점유 제한 시간 초과");
+      }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+      throw new IllegalStateException("재고 락 점유 스레드가 중단되었습니다", e);
     }
   }
 
