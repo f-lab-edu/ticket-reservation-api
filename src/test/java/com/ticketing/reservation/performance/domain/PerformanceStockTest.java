@@ -51,7 +51,10 @@ class PerformanceStockTest {
     assertThat(thrown)
         .isInstanceOfSatisfying(
             BusinessException.class,
-            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED));
+            e -> {
+              assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED);
+              assertThat(e.getProperties()).containsEntry("reservedQuantity", 30);
+            });
   }
 
   @Test
@@ -93,7 +96,10 @@ class PerformanceStockTest {
     assertThat(thrown)
         .isInstanceOfSatisfying(
             BusinessException.class,
-            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INSUFFICIENT_STOCK));
+            e -> {
+              assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INSUFFICIENT_STOCK);
+              assertThat(e.getProperties()).containsEntry("remainingQuantity", 70);
+            });
     assertThat(stock.getReservedQuantity()).isEqualTo(30);
   }
 

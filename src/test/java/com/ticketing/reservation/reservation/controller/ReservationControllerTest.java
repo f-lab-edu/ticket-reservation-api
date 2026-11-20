@@ -109,11 +109,12 @@ class ReservationControllerTest {
   }
 
   @Test
-  @DisplayName("잔여 판매 수량이 부족하면 409와 오류 코드를 반환한다")
+  @DisplayName("잔여 판매 수량이 부족하면 409와 오류 코드, 현재 잔여 수량을 반환한다")
   void returnsConflictWhenStockIsInsufficient() throws Exception {
     // given
     given(reservationService.reserve(anyLong(), anyLong(), anyInt()))
-        .willThrow(new BusinessException(ErrorCode.INSUFFICIENT_STOCK));
+        .willThrow(
+            new BusinessException(ErrorCode.INSUFFICIENT_STOCK, Map.of("remainingQuantity", 2)));
 
     // when
     ResultActions result = reserve(memberToken, VALID_FIELDS);
@@ -122,7 +123,8 @@ class ReservationControllerTest {
     result
         .andExpect(status().isConflict())
         .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-        .andExpect(jsonPath("$.code").value("INSUFFICIENT_STOCK"));
+        .andExpect(jsonPath("$.code").value("INSUFFICIENT_STOCK"))
+        .andExpect(jsonPath("$.remainingQuantity").value(2));
   }
 
   static Stream<Arguments> invalidFields() {

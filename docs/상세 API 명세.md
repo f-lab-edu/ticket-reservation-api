@@ -22,6 +22,7 @@
 | `detail` | 오류 설명 |
 | `instance` | 요청 경로 |
 | `code` | 오류 코드 (1.2). 1.2의 오류 코드에 해당할 때만 포함됩니다. |
+| (추가 필드) | 다시 요청하는 데 필요한 값입니다. 1.2 표의 `추가 필드` 열에 적힌 오류 코드에만 포함되며, 그 밖의 오류 응답에는 포함되지 않습니다. |
 
 ```json
 {
@@ -36,28 +37,28 @@
 
 ### 1.2. 오류 코드
 
-| code | status | detail |
-|---|---|---|
-| `DUPLICATE_EMAIL` | 409 | 이미 사용 중인 이메일입니다. |
-| `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호가 올바르지 않습니다. |
-| `UNAUTHORIZED` | 401 | 인증 정보가 없거나 유효하지 않습니다. |
-| `INVALID_REFRESH_TOKEN` | 401 | 리프레시 토큰이 유효하지 않습니다. |
-| `FORBIDDEN` | 403 | 요청한 작업을 수행할 권한이 없습니다. |
-| `AUTH_STORE_UNAVAILABLE` | 503 | 인증 서비스를 일시적으로 사용할 수 없습니다. |
-| `INVALID_SALE_START_AT` | 400 | 판매 시작 일시는 현재 시각보다 늦어야 합니다. |
-| `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시는 판매 시작 일시보다 늦어야 합니다. |
-| `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시는 공연 일시보다 빨라야 합니다. |
-| `INVALID_SALE_END_AT` | 400 | 판매 종료 일시는 현재 시각보다 늦어야 합니다. |
-| `INVALID_PERFORMANCE_AT` | 400 | 공연 일시는 현재 시각보다 늦어야 합니다. |
-| `PERFORMANCE_NOT_FOUND` | 404 | 공연을 찾을 수 없습니다. |
-| `SCHEDULE_CHANGE_NOT_ALLOWED` | 409 | 예약이 있는 공연은 공연 일시와 판매 시작 일시를 변경할 수 없습니다. |
-| `PERFORMANCE_ALREADY_STARTED` | 409 | 공연 일시가 지난 공연은 수정할 수 없습니다. |
-| `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량은 예약된 수량보다 적을 수 없습니다. |
-| `PERFORMANCE_MODIFIED` | 412 | 공연 정보가 변경되었습니다. 최신 정보를 다시 조회한 뒤 수정해 주세요. |
-| `IF_MATCH_REQUIRED` | 428 | If-Match 헤더에 조회 시 받은 ETag 하나를 포함해야 합니다. |
-| `STOCK_BUSY` | 503 | 요청이 많아 처리하지 못했습니다. 잠시 후 다시 시도해 주세요. |
-| `NOT_ON_SALE` | 409 | 판매 기간이 아닌 공연입니다. |
-| `INSUFFICIENT_STOCK` | 409 | 잔여 판매 수량이 부족합니다. |
+| code | status | detail | 추가 필드 |
+|---|---|---|---|
+| `DUPLICATE_EMAIL` | 409 | 이미 사용 중인 이메일입니다. | - |
+| `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호가 올바르지 않습니다. | - |
+| `UNAUTHORIZED` | 401 | 인증 정보가 없거나 유효하지 않습니다. | - |
+| `INVALID_REFRESH_TOKEN` | 401 | 리프레시 토큰이 유효하지 않습니다. | - |
+| `FORBIDDEN` | 403 | 요청한 작업을 수행할 권한이 없습니다. | - |
+| `AUTH_STORE_UNAVAILABLE` | 503 | 인증 서비스를 일시적으로 사용할 수 없습니다. | - |
+| `INVALID_SALE_START_AT` | 400 | 판매 시작 일시는 현재 시각보다 늦어야 합니다. | - |
+| `INVALID_SALE_PERIOD` | 400 | 판매 종료 일시는 판매 시작 일시보다 늦어야 합니다. | - |
+| `SALE_END_AFTER_PERFORMANCE` | 400 | 판매 종료 일시는 공연 일시보다 빨라야 합니다. | - |
+| `INVALID_SALE_END_AT` | 400 | 판매 종료 일시는 현재 시각보다 늦어야 합니다. | - |
+| `INVALID_PERFORMANCE_AT` | 400 | 공연 일시는 현재 시각보다 늦어야 합니다. | - |
+| `PERFORMANCE_NOT_FOUND` | 404 | 공연을 찾을 수 없습니다. | - |
+| `SCHEDULE_CHANGE_NOT_ALLOWED` | 409 | 예약이 있는 공연은 공연 일시와 판매 시작 일시를 변경할 수 없습니다. | - |
+| `PERFORMANCE_ALREADY_STARTED` | 409 | 공연 일시가 지난 공연은 수정할 수 없습니다. | - |
+| `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량은 예약된 수량보다 적을 수 없습니다. | `reservedQuantity` (integer): 처리 시점의 예약 수량 |
+| `PERFORMANCE_MODIFIED` | 412 | 공연 정보가 변경되었습니다. 최신 정보를 다시 조회한 뒤 수정해 주세요. | - |
+| `IF_MATCH_REQUIRED` | 428 | If-Match 헤더에 조회 시 받은 ETag 하나를 포함해야 합니다. | - |
+| `STOCK_BUSY` | 503 | 요청이 많아 처리하지 못했습니다. 잠시 후 다시 시도해 주세요. | - |
+| `NOT_ON_SALE` | 409 | 판매 기간이 아닌 공연입니다. | - |
+| `INSUFFICIENT_STOCK` | 409 | 잔여 판매 수량이 부족합니다. | `remainingQuantity` (integer): 처리 시점의 잔여 판매 수량 |
 
 ### 1.3. 인증
 
@@ -454,10 +455,22 @@ If-Match: "0"
 | `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |
 | `SCHEDULE_CHANGE_NOT_ALLOWED` | 409 | 예약이 있는데 공연 일시 또는 판매 시작 일시를 바꿈 |
 | `PERFORMANCE_ALREADY_STARTED` | 409 | 공연이 이미 시작됨 |
-| `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량이 이미 예약된 수량보다 적음 |
+| `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량이 이미 예약된 수량보다 적음. 처리 시점의 예약 수량을 `reservedQuantity`로 함께 반환 (4.8.1.2.3.1) |
 | `PERFORMANCE_MODIFIED` | 412 | `If-Match`가 현재 공연 정보의 `ETag`와 일치하지 않음 (다른 수정이 먼저 반영됨) |
 | `IF_MATCH_REQUIRED` | 428 | `If-Match` 헤더가 없거나, `*`가 들어 있거나, 형식에 맞는 ETag가 정확히 하나가 아님 |
 | `STOCK_BUSY` | 503 | 같은 공연의 예약·수정 요청이 몰려 재고 잠금을 3초 안에 얻지 못함 |
+
+```json
+{
+  "type": "about:blank",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "총 판매 수량은 예약된 수량보다 적을 수 없습니다.",
+  "instance": "/api/v1/performances/1",
+  "code": "TOTAL_QUANTITY_BELOW_RESERVED",
+  "reservedQuantity": 30
+}
+```
 
 오류가 여러 개 해당하면 아래 우선순위가 높은(숫자가 작은) 그룹의 오류를 먼저 반환합니다.
 
@@ -561,8 +574,20 @@ If-Match: "0"
 | - | 400 | 요청값이 필수 여부·형식·조건을 만족하지 않음 (`quantity` < 1 포함) |
 | `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |
 | `NOT_ON_SALE` | 409 | 판매 시작 일시 ≤ 현재 시각 < 판매 종료 일시를 만족하지 않음 |
-| `INSUFFICIENT_STOCK` | 409 | 예약 수량 > 잔여 판매 수량 |
+| `INSUFFICIENT_STOCK` | 409 | 예약 수량 > 잔여 판매 수량. 처리 시점의 잔여 판매 수량을 `remainingQuantity`로 함께 반환 (4.9.1.1.3) |
 | `STOCK_BUSY` | 503 | 같은 공연의 예약·수정 요청이 몰려 재고 잠금을 3초 안에 얻지 못함 |
+
+```json
+{
+  "type": "about:blank",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "잔여 판매 수량이 부족합니다.",
+  "instance": "/api/v1/reservations",
+  "code": "INSUFFICIENT_STOCK",
+  "remainingQuantity": 2
+}
+```
 
 오류가 여러 개 해당하면 아래 우선순위가 높은(숫자가 작은) 그룹의 오류를 먼저 반환합니다.
 
