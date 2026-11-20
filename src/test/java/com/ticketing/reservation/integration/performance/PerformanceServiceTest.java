@@ -366,6 +366,19 @@ class PerformanceServiceTest {
   }
 
   @Test
+  @DisplayName("없는 공연의 잔여 수량을 조회하면 공연 없음 예외가 발생한다")
+  void throwsNotFoundWhenGettingStockOfMissingPerformance() {
+    // when
+    Throwable thrown = catchThrowable(() -> performanceService.getStock(Long.MAX_VALUE));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PERFORMANCE_NOT_FOUND));
+  }
+
+  @Test
   @DisplayName("없는 공연을 수정하면 공연 없음 예외가 발생한다")
   void throwsNotFoundWhenUpdatingMissingPerformance() {
     // given

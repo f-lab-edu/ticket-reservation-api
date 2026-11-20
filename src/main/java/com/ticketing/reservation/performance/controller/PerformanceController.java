@@ -6,6 +6,7 @@ import com.ticketing.reservation.performance.domain.PerformanceDetail;
 import com.ticketing.reservation.performance.dto.PerformanceDetailResponse;
 import com.ticketing.reservation.performance.dto.PerformanceListResponse;
 import com.ticketing.reservation.performance.dto.PerformanceRequest;
+import com.ticketing.reservation.performance.dto.PerformanceStockResponse;
 import com.ticketing.reservation.performance.service.PerformanceService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -43,6 +44,11 @@ public class PerformanceController {
   public ResponseEntity<PerformanceDetailResponse> getPerformance(
       @PathVariable Long performanceId) {
     return withETag(HttpStatus.OK, performanceService.getPerformance(performanceId));
+  }
+
+  @GetMapping("/{performanceId}/stock")
+  public PerformanceStockResponse getStock(@PathVariable Long performanceId) {
+    return PerformanceStockResponse.from(performanceService.getStock(performanceId));
   }
 
   @PutMapping("/{performanceId}")

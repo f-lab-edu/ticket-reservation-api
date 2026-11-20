@@ -69,6 +69,13 @@ public class PerformanceService {
   }
 
   @Transactional(readOnly = true)
+  public PerformanceStock getStock(Long performanceId) {
+    return stockRepository
+        .findById(performanceId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.PERFORMANCE_NOT_FOUND));
+  }
+
+  @Transactional(readOnly = true)
   public List<PerformanceDetail> getPerformances(boolean available) {
     List<Performance> performances = findPerformances(available);
     Map<Long, PerformanceStock> stocks = findStocksOf(performances);

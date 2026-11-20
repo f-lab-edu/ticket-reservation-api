@@ -298,7 +298,6 @@ Authorization: Bearer {accessToken}
 | `performanceAt` | string | 공연 일시 |
 | `price` | integer | 티켓 가격 |
 | `totalQuantity` | integer | 총 판매 수량 |
-| `remainingQuantity` | integer | 잔여 판매 수량 (등록 시 총 판매 수량과 같음, 4.4.1.3) |
 | `saleStartAt` | string | 판매 시작 일시 |
 | `saleEndAt` | string | 판매 종료 일시 |
 
@@ -316,7 +315,6 @@ ETag: "0"
   "performanceAt": "2026-12-20T19:00:00",
   "price": 50000,
   "totalQuantity": 100,
-  "remainingQuantity": 100,
   "saleStartAt": "2026-12-01T10:00:00",
   "saleEndAt": "2026-12-19T18:00:00"
 }
@@ -344,6 +342,8 @@ ETag: "0"
 #### 응답: `200 OK`
 
 공연 등록 응답(4.1)과 같습니다. `ETag` 헤더를 포함합니다.
+
+- 요청에 `If-None-Match`로 현재 `ETag`를 보내면 본문 없이 `304 Not Modified`를 반환합니다.
 
 #### 오류
 
@@ -437,7 +437,7 @@ If-Match: "0"
 
 #### 응답: `200 OK`
 
-본문은 공연 등록 응답(4.1)과 같습니다. 단, `remainingQuantity`는 수정한 총 판매 수량에서 예약 수량을 뺀 값입니다.
+본문은 공연 등록 응답(4.1)과 같습니다.
 
 `ETag` 헤더는 반환하지 않습니다. 이후 다시 수정하려면 공연 상세 조회(4.2)로 최신 `ETag`를 받아야 합니다.
 
@@ -471,6 +471,39 @@ If-Match: "0"
 | 6 | 상태 기반 업무 규칙 | `PERFORMANCE_ALREADY_STARTED` → `SCHEDULE_CHANGE_NOT_ALLOWED` |
 | 7 | 날짜 값 검증 | `INVALID_SALE_PERIOD`, `INVALID_SALE_START_AT`, `INVALID_SALE_END_AT`, `INVALID_PERFORMANCE_AT`, `SALE_END_AFTER_PERFORMANCE` |
 | 8 | 예약 수량에 기대는 검증 | `TOTAL_QUANTITY_BELOW_RESERVED` |
+
+- `ETag`는 공연 정보를 수정할 때만 바뀌므로, 조회한 뒤 예약만 생겼다면 `PERFORMANCE_MODIFIED`로 거절하지 않습니다. 예약 때문에 요청을 받아들일 수 없으면 `SCHEDULE_CHANGE_NOT_ALLOWED`나 `TOTAL_QUANTITY_BELOW_RESERVED`로 거절합니다.
+
+### 4.5. 공연 잔여 수량 조회
+
+`GET /api/v1/performances/{performanceId}/stock` · 인증 불필요 · 기능정의서 4.7.2
+
+#### 요청
+
+| 파라미터 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `performanceId` | path | integer | O | 공연 식별자 |
+
+#### 응답: `200 OK`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `performanceId` | integer | 공연 식별자 |
+| `remainingQuantity` | integer | 잔여 판매 수량 (총 판매 수량 - 결제 대기·예약 확정 상태의 예약 수량) |
+
+```json
+{
+  "performanceId": 1,
+  "remainingQuantity": 70
+}
+```
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | `performanceId`가 숫자가 아님 |
+| `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |
 
 ## 5. 예약
 

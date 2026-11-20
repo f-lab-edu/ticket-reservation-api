@@ -2,6 +2,7 @@ package com.ticketing.reservation.integration.reservation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
@@ -33,10 +34,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -238,6 +243,64 @@ class ReservationServiceTest {
   }
 
   @Test
+  @DisplayName("예약으로 재고가 변경된 후에도 기존 ETag로 공연 정보를 수정한다")
+  void updatesWithExistingETagAfterReservation() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    IfMatch ifMatch = IfMatch.parse(IfMatch.eTagOf(performance.getVersion()));
+    reservationService.reserve(memberId, performance.getId(), 3);
+
+    // when
+    performanceService.update(
+        performance.getId(),
+        infoOf(performance, "새 공연", performance.getSalePeriod().saleStartAt()),
+        50,
+        ifMatch);
+
+    // then
+    Performance saved = performanceRepository.findById(performance.getId()).orElseThrow();
+    assertThat(saved.getTitle()).isEqualTo("새 공연");
+    assertThat(saved.getVersion()).isEqualTo(performance.getVersion() + 1);
+    assertThat(remainingOf(performance)).isEqualTo(47);
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @DisplayName("예약으로 재고가 변경된 후 기존 ETag로 수정하면 비즈니스 규칙 오류를 반환한다")
+  @MethodSource("ruleViolationsAfterReservation")
+  void returnsBusinessRuleErrorWithExistingETagAfterReservation(
+      String situation, boolean delaySaleStart, int totalQuantity, ErrorCode expected) {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    IfMatch ifMatch = IfMatch.parse(IfMatch.eTagOf(performance.getVersion()));
+    reservationService.reserve(memberId, performance.getId(), 3);
+    LocalDateTime saleStartAt =
+        delaySaleStart ? now.plusHours(1) : performance.getSalePeriod().saleStartAt();
+
+    // when
+    Throwable thrown =
+        catchThrowable(
+            () ->
+                performanceService.update(
+                    performance.getId(),
+                    infoOf(performance, "공연", saleStartAt),
+                    totalQuantity,
+                    ifMatch));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(expected));
+    assertThat(performanceRepository.findById(performance.getId()).orElseThrow().getVersion())
+        .isEqualTo(performance.getVersion());
+    assertThat(stockRepository.findById(performance.getId()).orElseThrow().getTotalQuantity())
+        .isEqualTo(100);
+  }
+
+  static Stream<Arguments> ruleViolationsAfterReservation() {
+    return Stream.of(
+        arguments("예약보다 적은 총 수량 → 예약 수량 오류", false, 2, ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED),
+        arguments("판매 시작 일시 변경 → 일정 변경 불가 오류", true, 100, ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED));
+  }
+
+  @Test
   @DisplayName("판매 시작 일시 수정과 첫 예약이 동시에 일어나도 둘 중 하나만 성공한다")
   void allowsOnlyOneOfSaleStartChangeAndFirstReservation() throws Exception {
     // given
@@ -293,6 +356,17 @@ class ReservationServiceTest {
     ReflectionTestUtils.setField(stock, "reservedQuantity", reservedQuantity);
     stockRepository.save(stock);
     return performance;
+  }
+
+  private static PerformanceInfo infoOf(
+      Performance performance, String title, LocalDateTime saleStartAt) {
+    return new PerformanceInfo(
+        title,
+        performance.getVenue(),
+        performance.getPerformanceAt(),
+        performance.getPrice(),
+        saleStartAt,
+        performance.getSalePeriod().saleEndAt());
   }
 
   private int remainingOf(Performance performance) {
