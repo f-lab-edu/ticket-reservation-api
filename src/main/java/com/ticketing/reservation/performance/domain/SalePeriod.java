@@ -13,4 +13,8 @@ public record SalePeriod(LocalDateTime saleStartAt, LocalDateTime saleEndAt) {
       throw new BusinessException(ErrorCode.INVALID_SALE_PERIOD);
     }
   }
+
+  public boolean isOnSale(LocalDateTime now) {
+    return !now.isBefore(saleStartAt) && now.isBefore(saleEndAt);
+  }
 }

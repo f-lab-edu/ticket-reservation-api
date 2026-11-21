@@ -24,14 +24,17 @@ public class PerformanceService {
 
   private final PerformanceRepository performanceRepository;
   private final PerformanceStockRepository stockRepository;
+  private final PerformanceStockLocker stockLocker;
   private final Clock clock;
 
   public PerformanceService(
       PerformanceRepository performanceRepository,
       PerformanceStockRepository stockRepository,
+      PerformanceStockLocker stockLocker,
       Clock clock) {
     this.performanceRepository = performanceRepository;
     this.stockRepository = stockRepository;
+    this.stockLocker = stockLocker;
     this.clock = clock;
   }
 
@@ -47,14 +50,14 @@ public class PerformanceService {
   @Transactional
   public PerformanceDetail update(
       Long performanceId, PerformanceInfo info, int totalQuantity, IfMatch ifMatch) {
+    PerformanceStock stock = stockLocker.lock(performanceId);
     Performance performance =
         performanceRepository
-            .findByIdForUpdate(performanceId)
+            .findById(performanceId)
             .orElseThrow(() -> new BusinessException(ErrorCode.PERFORMANCE_NOT_FOUND));
     if (!ifMatch.matches(performance.getVersion())) {
       throw new BusinessException(ErrorCode.PERFORMANCE_MODIFIED);
     }
-    PerformanceStock stock = findStock(performanceId);
     performance.update(info, stock.hasReservation(), LocalDateTime.now(clock));
     stock.changeTotalQuantity(totalQuantity);
     return new PerformanceDetail(performance, stock);
@@ -63,6 +66,13 @@ public class PerformanceService {
   @Transactional(readOnly = true)
   public PerformanceDetail getPerformance(Long performanceId) {
     return new PerformanceDetail(findPerformance(performanceId), findStock(performanceId));
+  }
+
+  @Transactional(readOnly = true)
+  public PerformanceStock getStock(Long performanceId) {
+    return stockRepository
+        .findById(performanceId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.PERFORMANCE_NOT_FOUND));
   }
 
   @Transactional(readOnly = true)

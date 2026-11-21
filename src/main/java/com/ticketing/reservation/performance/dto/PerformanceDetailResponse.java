@@ -12,7 +12,6 @@ public record PerformanceDetailResponse(
     LocalDateTime performanceAt,
     int price,
     int totalQuantity,
-    int remainingQuantity,
     LocalDateTime saleStartAt,
     LocalDateTime saleEndAt) {
 
@@ -26,7 +25,6 @@ public record PerformanceDetailResponse(
         performance.getPerformanceAt(),
         performance.getPrice(),
         stock.getTotalQuantity(),
-        stock.getRemainingQuantity(),
         performance.getSalePeriod().saleStartAt(),
         performance.getSalePeriod().saleEndAt());
   }

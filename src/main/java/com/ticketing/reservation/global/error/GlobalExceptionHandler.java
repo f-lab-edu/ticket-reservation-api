@@ -16,6 +16,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail problemDetail =
         ProblemDetail.forStatusAndDetail(errorCode.getStatus(), errorCode.getDetail());
     problemDetail.setProperty(CODE, errorCode.name());
+    e.getProperties().forEach(problemDetail::setProperty);
     return problemDetail;
   }
 }

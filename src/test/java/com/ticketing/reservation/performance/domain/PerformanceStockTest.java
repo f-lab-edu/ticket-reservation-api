@@ -27,7 +27,7 @@ class PerformanceStockTest {
   @DisplayName("총 판매 수량을 예약 수량과 같게 줄이면 잔여 수량이 0이 된다")
   void allowsTotalQuantityEqualToReserved() {
     // given
-    PerformanceStock stock = stockWithReserved(30);
+    PerformanceStock stock = stock(100, 30);
 
     // when
     stock.changeTotalQuantity(30);
@@ -42,7 +42,7 @@ class PerformanceStockTest {
   @DisplayName("총 판매 수량이 예약 수량보다 적으면 거절한다")
   void rejectsTotalQuantityBelowReserved() {
     // given
-    PerformanceStock stock = stockWithReserved(30);
+    PerformanceStock stock = stock(100, 30);
 
     // when
     Throwable thrown = catchThrowable(() -> stock.changeTotalQuantity(29));
@@ -51,11 +51,60 @@ class PerformanceStockTest {
     assertThat(thrown)
         .isInstanceOfSatisfying(
             BusinessException.class,
-            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED));
+            e -> {
+              assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED);
+              assertThat(e.getProperties()).containsEntry("reservedQuantity", 30);
+            });
   }
 
-  private PerformanceStock stockWithReserved(int reservedQuantity) {
-    PerformanceStock stock = PerformanceStock.create(1L, 100);
+  @Test
+  @DisplayName("예약하면 예약 수량이 늘어난다")
+  void reservesQuantity() {
+    // given
+    PerformanceStock stock = stock(100, 30);
+
+    // when
+    stock.reserve(5);
+
+    // then
+    assertThat(stock.getReservedQuantity()).isEqualTo(35);
+  }
+
+  @Test
+  @DisplayName("잔여 수량과 같은 수량은 예약할 수 있다")
+  void reservesAllRemainingQuantity() {
+    // given
+    PerformanceStock stock = stock(100, 30);
+
+    // when
+    stock.reserve(70);
+
+    // then
+    assertThat(stock.getReservedQuantity()).isEqualTo(100);
+  }
+
+  @Test
+  @DisplayName("잔여 수량보다 많이 예약하면 거절하고 예약 수량을 바꾸지 않는다")
+  void rejectsReservationOverRemaining() {
+    // given
+    PerformanceStock stock = stock(100, 30);
+
+    // when
+    Throwable thrown = catchThrowable(() -> stock.reserve(71));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            e -> {
+              assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INSUFFICIENT_STOCK);
+              assertThat(e.getProperties()).containsEntry("remainingQuantity", 70);
+            });
+    assertThat(stock.getReservedQuantity()).isEqualTo(30);
+  }
+
+  private PerformanceStock stock(int totalQuantity, int reservedQuantity) {
+    PerformanceStock stock = PerformanceStock.create(1L, totalQuantity);
     ReflectionTestUtils.setField(stock, "reservedQuantity", reservedQuantity);
     return stock;
   }
