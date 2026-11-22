@@ -111,7 +111,7 @@ class PerformanceControllerTest {
           .andExpect(jsonPath("$.performanceAt").value("2026-12-20T19:00:00"))
           .andExpect(jsonPath("$.price").value(50000))
           .andExpect(jsonPath("$.totalQuantity").value(100))
-          .andExpect(jsonPath("$.remainingQuantity").value(70))
+          .andExpect(jsonPath("$.remainingQuantity").doesNotExist())
           .andExpect(jsonPath("$.saleStartAt").value("2026-12-01T10:00:00"))
           .andExpect(jsonPath("$.saleEndAt").value("2026-12-19T18:00:00"))
           .andExpect(header().string(HttpHeaders.ETAG, strongETag(0)));
@@ -207,6 +207,45 @@ class PerformanceControllerTest {
 
       // when
       ResultActions result = mockMvc.perform(get("/api/v1/performances/1"));
+
+      // then
+      result
+          .andExpect(status().isNotFound())
+          .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+          .andExpect(jsonPath("$.code").value("PERFORMANCE_NOT_FOUND"));
+    }
+  }
+
+  @Nested
+  @DisplayName("공연 잔여 수량 조회")
+  class GetStock {
+
+    @Test
+    @DisplayName("공연이 있으면 200과 잔여 수량을 반환하고 ETag는 보내지 않는다")
+    void returnsRemainingQuantityWithoutETag() throws Exception {
+      // given
+      given(performanceService.getStock(1L)).willReturn(detail(1L).stock());
+
+      // when
+      ResultActions result = mockMvc.perform(get("/api/v1/performances/1/stock"));
+
+      // then
+      result
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.performanceId").value(1))
+          .andExpect(jsonPath("$.remainingQuantity").value(70))
+          .andExpect(header().doesNotExist(HttpHeaders.ETAG));
+    }
+
+    @Test
+    @DisplayName("공연이 없으면 404와 오류 코드를 반환한다")
+    void returnsNotFoundWhenPerformanceDoesNotExist() throws Exception {
+      // given
+      given(performanceService.getStock(1L))
+          .willThrow(new BusinessException(ErrorCode.PERFORMANCE_NOT_FOUND));
+
+      // when
+      ResultActions result = mockMvc.perform(get("/api/v1/performances/1/stock"));
 
       // then
       result

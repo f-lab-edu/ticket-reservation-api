@@ -4,6 +4,7 @@ import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import java.util.Map;
 
 @Entity
 public class PerformanceStock {
@@ -27,9 +28,18 @@ public class PerformanceStock {
 
   public void changeTotalQuantity(int totalQuantity) {
     if (totalQuantity < reservedQuantity) {
-      throw new BusinessException(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED);
+      throw new BusinessException(
+          ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED, Map.of("reservedQuantity", reservedQuantity));
     }
     this.totalQuantity = totalQuantity;
+  }
+
+  public void reserve(int quantity) {
+    if (quantity > getRemainingQuantity()) {
+      throw new BusinessException(
+          ErrorCode.INSUFFICIENT_STOCK, Map.of("remainingQuantity", getRemainingQuantity()));
+    }
+    this.reservedQuantity += quantity;
   }
 
   public boolean hasReservation() {
@@ -42,6 +52,10 @@ public class PerformanceStock {
 
   public int getTotalQuantity() {
     return totalQuantity;
+  }
+
+  public int getReservedQuantity() {
+    return reservedQuantity;
   }
 
   public int getRemainingQuantity() {

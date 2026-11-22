@@ -24,7 +24,12 @@ public enum ErrorCode {
   PERFORMANCE_ALREADY_STARTED(HttpStatus.CONFLICT, "공연 일시가 지난 공연은 수정할 수 없습니다."),
   TOTAL_QUANTITY_BELOW_RESERVED(HttpStatus.CONFLICT, "총 판매 수량은 예약된 수량보다 적을 수 없습니다."),
   PERFORMANCE_MODIFIED(HttpStatus.PRECONDITION_FAILED, "공연 정보가 변경되었습니다. 최신 정보를 다시 조회한 뒤 수정해 주세요."),
-  IF_MATCH_REQUIRED(HttpStatus.PRECONDITION_REQUIRED, "If-Match 헤더에 조회 시 받은 ETag 하나를 포함해야 합니다.");
+  IF_MATCH_REQUIRED(HttpStatus.PRECONDITION_REQUIRED, "If-Match 헤더에 조회 시 받은 ETag 하나를 포함해야 합니다."),
+  STOCK_BUSY(HttpStatus.SERVICE_UNAVAILABLE, "요청이 많아 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."),
+
+  // 예약
+  NOT_ON_SALE(HttpStatus.CONFLICT, "판매 기간이 아닌 공연입니다."),
+  INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "잔여 판매 수량이 부족합니다.");
 
   private final HttpStatus status;
   private final String detail;
