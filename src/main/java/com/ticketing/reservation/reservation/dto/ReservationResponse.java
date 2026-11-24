@@ -15,7 +15,7 @@ public record ReservationResponse(
     @JsonFormat(pattern = MICROS_PATTERN) LocalDateTime reservedAt,
     @JsonFormat(pattern = MICROS_PATTERN) LocalDateTime paymentDeadlineAt) {
 
-  private static final String MICROS_PATTERN = "uuuu-MM-dd'T'HH:mm:ss.SSSSSS";
+  static final String MICROS_PATTERN = "uuuu-MM-dd'T'HH:mm:ss.SSSSSS";
 
   public static ReservationResponse from(Reservation reservation) {
     return new ReservationResponse(

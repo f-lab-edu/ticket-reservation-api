@@ -2,6 +2,7 @@ package com.ticketing.reservation.integration.reservation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import com.ticketing.reservation.global.error.BusinessException;
@@ -17,6 +18,7 @@ import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import com.ticketing.reservation.performance.repository.PerformanceStockRepository;
 import com.ticketing.reservation.performance.service.PerformanceService;
 import com.ticketing.reservation.reservation.domain.Reservation;
+import com.ticketing.reservation.reservation.domain.ReservationDetail;
 import com.ticketing.reservation.reservation.domain.ReservationStatus;
 import com.ticketing.reservation.reservation.repository.ReservationRepository;
 import com.ticketing.reservation.reservation.service.ReservationService;
@@ -27,8 +29,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -54,6 +58,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class ReservationServiceTest {
 
   private static final Duration LOCK_HOLD_LIMIT = Duration.ofSeconds(10);
+  private static final Duration WAIT_LIMIT = Duration.ofSeconds(10);
 
   @Autowired private ReservationService reservationService;
   @Autowired private PerformanceService performanceService;
@@ -154,7 +159,7 @@ class ReservationServiceTest {
                         locked.countDown();
                         awaitRelease(release);
                       }));
-      locked.await();
+      assertThat(locked.await(WAIT_LIMIT.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
 
       // when
       Throwable thrown =
@@ -344,6 +349,145 @@ class ReservationServiceTest {
     }
   }
 
+  @Test
+  @DisplayName("내 예약 목록을 조회하면 본인 예약만 최신순으로 공연 정보와 함께 반환한다")
+  void returnsOnlyMyReservationsLatestFirst() {
+    // given
+    Performance first = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Performance second = save(now.minusDays(1), now.plusDays(2), 100, 0);
+    Reservation older = reservationService.reserve(memberId, first.getId(), 1);
+    Reservation newer = reservationService.reserve(memberId, second.getId(), 2);
+    reservationService.reserve(otherMemberId(), first.getId(), 3);
+
+    // when
+    List<ReservationDetail> details = reservationService.getMyReservations(memberId, Set.of());
+
+    // then
+    assertThat(details)
+        .extracting(d -> d.reservation().getId(), d -> d.performance().getId())
+        .containsExactly(tuple(newer.getId(), second.getId()), tuple(older.getId(), first.getId()));
+  }
+
+  @Test
+  @DisplayName("예약이 없으면 빈 목록을 반환한다")
+  void returnsEmptyListWithoutReservations() {
+    // when
+    List<ReservationDetail> details = reservationService.getMyReservations(memberId, Set.of());
+
+    // then
+    assertThat(details).isEmpty();
+  }
+
+  @Test
+  @DisplayName("상태를 지정하지 않으면 모든 상태의 예약을 조회한다")
+  void includesExpiredWithoutStatusFilter() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation expired = saveExpired(performance);
+    Reservation pending = reservationService.reserve(memberId, performance.getId(), 1);
+
+    // when
+    List<ReservationDetail> details = reservationService.getMyReservations(memberId, Set.of());
+
+    // then
+    assertThat(details)
+        .extracting(d -> d.reservation().getId(), ReservationDetail::status)
+        .containsExactly(
+            tuple(pending.getId(), ReservationStatus.PENDING_PAYMENT),
+            tuple(expired.getId(), ReservationStatus.EXPIRED));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @DisplayName("상태를 지정하면 조회 시점 상태가 일치하는 예약만 반환한다")
+  @MethodSource("statusFilters")
+  void filtersByStatus(Set<ReservationStatus> statuses, List<ReservationStatus> expected) {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    saveExpired(performance);
+    reservationService.reserve(memberId, performance.getId(), 1);
+
+    // when
+    List<ReservationDetail> details = reservationService.getMyReservations(memberId, statuses);
+
+    // then
+    assertThat(details).extracting(ReservationDetail::status).containsExactlyElementsOf(expected);
+  }
+
+  static Stream<Arguments> statusFilters() {
+    return Stream.of(
+        arguments(
+            Set.of(ReservationStatus.PENDING_PAYMENT), List.of(ReservationStatus.PENDING_PAYMENT)),
+        arguments(Set.of(ReservationStatus.EXPIRED), List.of(ReservationStatus.EXPIRED)),
+        arguments(
+            Set.of(ReservationStatus.PENDING_PAYMENT, ReservationStatus.EXPIRED),
+            List.of(ReservationStatus.PENDING_PAYMENT, ReservationStatus.EXPIRED)));
+  }
+
+  @Test
+  @DisplayName("결제 제한 시각이 지난 예약을 상세 조회하면 만료 상태로 반환한다")
+  void showsExpiredInDetail() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation expired = saveExpired(performance);
+
+    // when
+    ReservationDetail detail = reservationService.getMyReservation(memberId, expired.getId());
+
+    // then
+    assertThat(detail.status()).isEqualTo(ReservationStatus.EXPIRED);
+  }
+
+  @Test
+  @DisplayName("내 예약을 상세 조회하면 공연 정보와 함께 반환한다")
+  void returnsMyReservationDetail() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation reservation = reservationService.reserve(memberId, performance.getId(), 2);
+
+    // when
+    ReservationDetail detail = reservationService.getMyReservation(memberId, reservation.getId());
+
+    // then
+    assertThat(detail.reservation().getId()).isEqualTo(reservation.getId());
+    assertThat(detail.performance().getId()).isEqualTo(performance.getId());
+    assertThat(detail.status()).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+  }
+
+  @Test
+  @DisplayName("다른 회원의 예약은 찾을 수 없다")
+  void rejectsOtherMembersReservation() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation others = reservationService.reserve(otherMemberId(), performance.getId(), 1);
+
+    // when
+    Throwable thrown =
+        catchThrowable(() -> reservationService.getMyReservation(memberId, others.getId()));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.RESERVATION_NOT_FOUND));
+  }
+
+  @Test
+  @DisplayName("없는 예약은 찾을 수 없다")
+  void rejectsMissingReservation() {
+    // when
+    Throwable thrown =
+        catchThrowable(() -> reservationService.getMyReservation(memberId, Long.MAX_VALUE));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.RESERVATION_NOT_FOUND));
+  }
+
+  private Reservation saveExpired(Performance performance) {
+    return reservationRepository.save(
+        Reservation.create(memberId, performance, 1, now.minusMinutes(11)));
+  }
+
+  private Long otherMemberId() {
+    return memberRepository.save(Member.create("other@example.com", "{bcrypt}hash")).getId();
+  }
+
   private Performance save(
       LocalDateTime saleStartAt, LocalDateTime saleEndAt, int totalQuantity, int reservedQuantity) {
     Performance performance =
@@ -405,8 +549,7 @@ class ReservationServiceTest {
   }
 
   private static <T> List<T> runConcurrently(List<Callable<T>> tasks) throws Exception {
-    CountDownLatch ready = new CountDownLatch(tasks.size());
-    CountDownLatch start = new CountDownLatch(1);
+    CyclicBarrier start = new CyclicBarrier(tasks.size());
 
     try (ExecutorService executor = Executors.newFixedThreadPool(tasks.size())) {
       List<Future<T>> futures = new ArrayList<>();
@@ -414,17 +557,14 @@ class ReservationServiceTest {
         futures.add(
             executor.submit(
                 () -> {
-                  ready.countDown();
-                  start.await();
+                  start.await(WAIT_LIMIT.toMillis(), TimeUnit.MILLISECONDS);
                   return task.call();
                 }));
       }
-      ready.await();
-      start.countDown();
 
       List<T> results = new ArrayList<>();
       for (Future<T> future : futures) {
-        results.add(future.get());
+        results.add(future.get(WAIT_LIMIT.toMillis(), TimeUnit.MILLISECONDS));
       }
       return results;
     }

@@ -59,6 +59,7 @@
 | `STOCK_BUSY` | 503 | 요청이 많아 처리하지 못했습니다. 잠시 후 다시 시도해 주세요. | - |
 | `NOT_ON_SALE` | 409 | 판매 기간이 아닌 공연입니다. | - |
 | `INSUFFICIENT_STOCK` | 409 | 잔여 판매 수량이 부족합니다. | `remainingQuantity` (integer): 처리 시점의 잔여 판매 수량 |
+| `RESERVATION_NOT_FOUND` | 404 | 예약을 찾을 수 없습니다. | - |
 
 ### 1.3. 인증
 
@@ -598,3 +599,118 @@ If-Match: "0"
 | 3 | 대상 리소스 확인 | `PERFORMANCE_NOT_FOUND` |
 | 4 | 상태 기반 업무 규칙 | `NOT_ON_SALE` |
 | 5 | 예약 수량에 기대는 검증 | `INSUFFICIENT_STOCK` |
+
+### 5.2. 내 예약 목록 조회
+
+`GET /api/v1/reservations` · 인증 필요(회원, 관리자) · 기능정의서 4.10
+
+#### 요청
+
+| 파라미터 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `status` | query | string | X | 조회할 예약 상태(아래 예약 상태 참고). 여러 값은 반복하거나 쉼표로 구분해 지정하며, 두 방식을 섞을 수는 없습니다. 예: `?status=PENDING_PAYMENT&status=EXPIRED`, `?status=PENDING_PAYMENT,EXPIRED`. 값은 대소문자를 구분하고, 값 앞뒤의 공백은 무시합니다. 빈 값(공백만 있는 값 포함)은 무시하며, 생략하거나 모두 빈 값이면 모든 상태를 조회합니다. |
+
+- 액세스 토큰의 회원이 신청한 예약만 조회합니다(4.10.1.1).
+- `status`는 조회 시점의 상태로 비교합니다. 결제 제한 시각이 지난 결제 대기 예약은 `EXPIRED`로 조회됩니다(아래 예약 상태 참고).
+- 만료된 예약이 필요 없으면 보여줄 상태만 `status`로 지정합니다. 예: `?status=PENDING_PAYMENT`
+- 정렬: 예약 식별자 내림차순(최근 신청한 예약이 먼저)
+- 페이징 없이 조건에 맞는 예약을 모두 반환합니다.
+
+#### 응답: `200 OK`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `reservations` | array | 예약 목록. 조건에 맞는 예약이 없으면 빈 배열 |
+| `reservations[].id` | integer | 예약 식별자 |
+| `reservations[].performance.id` | integer | 공연 식별자 |
+| `reservations[].performance.title` | string | 공연명 |
+| `reservations[].performance.performanceAt` | string | 공연 일시 |
+| `reservations[].quantity` | integer | 예약 수량 |
+| `reservations[].totalPrice` | integer | 예약 금액 |
+| `reservations[].status` | string | 예약 상태 (아래 예약 상태 참고) |
+| `reservations[].paymentDeadlineAt` | string \| null | 결제 제한 시각. 결제 대기(`PENDING_PAYMENT`)일 때만 값이 있고, 그 외에는 `null` (4.10.1.2.1) |
+
+```json
+{
+  "reservations": [
+    {
+      "id": 10,
+      "performance": {
+        "id": 1,
+        "title": "콘서트1",
+        "performanceAt": "2026-12-20T19:00:00"
+      },
+      "quantity": 2,
+      "totalPrice": 100000,
+      "status": "PENDING_PAYMENT",
+      "paymentDeadlineAt": "2026-12-05T12:10:00.123456"
+    }
+  ]
+}
+```
+
+#### 예약 상태
+
+| 값 | 의미 |
+|---|---|
+| `PENDING_PAYMENT` | 결제 대기. 현재 시각 < 결제 제한 시각 |
+| `EXPIRED` | 만료. 결제 대기 중 결제 제한 시각이 지남(현재 시각 ≥ 결제 제한 시각, 4.9.2.1) |
+
+- 조회 시점의 현재 시각으로 상태를 판정합니다. 결제 제한 시각이 지난 결제 대기 예약은 만료 처리 전이라도 만료로 봅니다.
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | 1. `status`에 예약 상태 표에 없는 값이 있음(예: `?status=UNKNOWN`)<br>2. `status`를 반복과 쉼표 구분을 섞어 지정함(예: `?status=PENDING_PAYMENT,EXPIRED&status=PENDING_PAYMENT`) |
+
+### 5.3. 예약 상세 조회
+
+`GET /api/v1/reservations/{reservationId}` · 인증 필요(회원, 관리자) · 기능정의서 4.11
+
+#### 요청
+
+| 필드 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `reservationId` | path | integer | O | 예약 식별자 |
+
+#### 응답: `200 OK`
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | integer | 예약 식별자 |
+| `performance.id` | integer | 공연 식별자 |
+| `performance.title` | string | 공연명 |
+| `performance.venue` | string | 공연 장소 |
+| `performance.performanceAt` | string | 공연 일시 |
+| `quantity` | integer | 예약 수량 |
+| `unitPrice` | integer | 예약 당시 티켓 가격 |
+| `totalPrice` | integer | 예약 금액 (`unitPrice` × `quantity`) |
+| `status` | string | 예약 상태 (5.2의 예약 상태 참고) |
+| `reservedAt` | string | 예약 일시 |
+| `paymentDeadlineAt` | string \| null | 결제 제한 시각. 결제 대기(`PENDING_PAYMENT`)일 때만 값이 있고, 만료 등 그 외에는 `null` (4.11.1.2.1) |
+
+```json
+{
+  "id": 10,
+  "performance": {
+    "id": 1,
+    "title": "콘서트1",
+    "venue": "장소A",
+    "performanceAt": "2026-12-20T19:00:00"
+  },
+  "quantity": 2,
+  "unitPrice": 50000,
+  "totalPrice": 100000,
+  "status": "PENDING_PAYMENT",
+  "reservedAt": "2026-12-05T12:00:00.123456",
+  "paymentDeadlineAt": "2026-12-05T12:10:00.123456"
+}
+```
+
+#### 오류
+
+| code | status | 상황 |
+|---|---|---|
+| - | 400 | `reservationId`가 정수가 아님 |
+| `RESERVATION_NOT_FOUND` | 404 | 예약이 없거나 다른 회원의 예약임(4.11.1.1). |
