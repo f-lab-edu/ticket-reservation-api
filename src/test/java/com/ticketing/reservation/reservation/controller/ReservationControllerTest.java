@@ -27,6 +27,7 @@ import com.ticketing.reservation.reservation.domain.Reservation;
 import com.ticketing.reservation.reservation.domain.ReservationDetail;
 import com.ticketing.reservation.reservation.domain.ReservationStatus;
 import com.ticketing.reservation.reservation.service.ReservationService;
+import java.net.URI;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -332,6 +333,20 @@ class ReservationControllerTest {
     result
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("RESERVATION_NOT_FOUND"));
+  }
+
+  @Test
+  @DisplayName("예약 식별자에 공백이 섞이면 400을 반환한다")
+  void rejectsReservationIdWithWhitespace() throws Exception {
+    // when
+    ResultActions result =
+        mockMvc.perform(
+            MockMvcRequestBuilders.get(URI.create("/api/v1/reservations/1%200"))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + memberToken));
+
+    // then
+    result.andExpect(status().isBadRequest()).andExpect(jsonPath("$.status").value(400));
+    then(reservationService).shouldHaveNoInteractions();
   }
 
   static Stream<Arguments> invalidFields() {
