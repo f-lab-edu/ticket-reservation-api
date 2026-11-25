@@ -17,6 +17,7 @@ import com.ticketing.reservation.performance.domain.PerformanceStock;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import com.ticketing.reservation.performance.repository.PerformanceStockRepository;
 import com.ticketing.reservation.performance.service.PerformanceService;
+import com.ticketing.reservation.performance.service.PerformanceStockLocker;
 import com.ticketing.reservation.reservation.domain.Reservation;
 import com.ticketing.reservation.reservation.domain.ReservationDetail;
 import com.ticketing.reservation.reservation.domain.ReservationStatus;
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -66,6 +68,7 @@ class ReservationServiceTest {
   @Autowired private PerformanceRepository performanceRepository;
   @Autowired private PerformanceStockRepository stockRepository;
   @Autowired private MemberRepository memberRepository;
+  @Autowired private PerformanceStockLocker stockLocker;
   @Autowired private Clock clock;
   @Autowired private PlatformTransactionManager transactionManager;
 
@@ -421,6 +424,26 @@ class ReservationServiceTest {
         arguments(
             Set.of(ReservationStatus.PENDING_PAYMENT, ReservationStatus.EXPIRED),
             List.of(ReservationStatus.PENDING_PAYMENT, ReservationStatus.EXPIRED)));
+  }
+
+  @ParameterizedTest(name = "제한 시각 {0}ns → {1}")
+  @DisplayName("결제 제한 시각 경계에서 상태를 걸러 조회한다")
+  @CsvSource({"-1, PENDING_PAYMENT", "0, EXPIRED"})
+  void filtersByStatusAtDeadlineBoundary(long nanosFromDeadline, ReservationStatus status) {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation reservation =
+        reservationRepository.save(Reservation.create(memberId, performance, 1, now));
+    LocalDateTime queriedAt = reservation.getPaymentDeadlineAt().plusNanos(nanosFromDeadline);
+    Clock fixed = Clock.fixed(queriedAt.atZone(clock.getZone()).toInstant(), clock.getZone());
+    ReservationService service =
+        new ReservationService(reservationRepository, performanceRepository, stockLocker, fixed);
+
+    // when
+    List<ReservationDetail> details = service.getMyReservations(memberId, Set.of(status));
+
+    // then
+    assertThat(details).extracting(ReservationDetail::status).containsExactly(status);
   }
 
   @Test

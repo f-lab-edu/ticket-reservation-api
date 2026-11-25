@@ -12,6 +12,7 @@ import com.ticketing.reservation.reservation.domain.ReservationStatus;
 import com.ticketing.reservation.reservation.repository.ReservationRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,7 +55,7 @@ public class ReservationService {
 
   @Transactional(readOnly = true)
   public List<ReservationDetail> getMyReservations(Long memberId, Set<ReservationStatus> statuses) {
-    LocalDateTime now = LocalDateTime.now(clock);
+    LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
     List<Reservation> reservations =
         statuses.isEmpty()
             ? reservationRepository.findAllByMemberIdOrderByIdDesc(memberId)
