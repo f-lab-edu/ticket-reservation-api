@@ -1,2 +1,5 @@
 auth:
   jwt-secret: test-only-jwt-secret-key-not-for-production-use
+app:
+  scheduling:
+    enabled: false

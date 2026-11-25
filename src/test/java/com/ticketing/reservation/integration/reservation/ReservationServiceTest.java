@@ -3,6 +3,7 @@ package com.ticketing.reservation.integration.reservation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import com.ticketing.reservation.global.error.BusinessException;
@@ -16,12 +17,14 @@ import com.ticketing.reservation.performance.domain.PerformanceInfo;
 import com.ticketing.reservation.performance.domain.PerformanceStock;
 import com.ticketing.reservation.performance.repository.PerformanceRepository;
 import com.ticketing.reservation.performance.repository.PerformanceStockRepository;
+import com.ticketing.reservation.performance.service.OverdueReservationExpirer;
 import com.ticketing.reservation.performance.service.PerformanceService;
 import com.ticketing.reservation.performance.service.PerformanceStockLocker;
 import com.ticketing.reservation.reservation.domain.Reservation;
 import com.ticketing.reservation.reservation.domain.ReservationDetail;
 import com.ticketing.reservation.reservation.domain.ReservationStatus;
 import com.ticketing.reservation.reservation.repository.ReservationRepository;
+import com.ticketing.reservation.reservation.service.ReservationExpiryScheduler;
 import com.ticketing.reservation.reservation.service.ReservationService;
 import java.time.Clock;
 import java.time.Duration;
@@ -30,6 +33,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -40,10 +44,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -51,6 +52,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -69,8 +71,11 @@ class ReservationServiceTest {
   @Autowired private PerformanceStockRepository stockRepository;
   @Autowired private MemberRepository memberRepository;
   @Autowired private PerformanceStockLocker stockLocker;
+  @Autowired private OverdueReservationExpirer overdueReservationExpirer;
+  @Autowired private ReservationExpiryScheduler expiryScheduler;
   @Autowired private Clock clock;
   @Autowired private PlatformTransactionManager transactionManager;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   private Long memberId;
   private LocalDateTime now;
@@ -144,7 +149,7 @@ class ReservationServiceTest {
   }
 
   @Test
-  @DisplayName("재고 잠금을 제한 시간 안에 얻지 못하면 재고 혼잡 오류를 반환한다")
+  @DisplayName("재고 락을 제한 시간 안에 획득하지 못하면 재고 혼잡 오류를 반환한다")
   void rejectsWhenStockLockTimesOut() throws Exception {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
@@ -276,13 +281,13 @@ class ReservationServiceTest {
   @DisplayName("예약으로 재고가 변경된 후 기존 ETag로 수정하면 비즈니스 규칙 오류를 반환한다")
   @MethodSource("ruleViolationsAfterReservation")
   void returnsBusinessRuleErrorWithExistingETagAfterReservation(
-      String situation, boolean delaySaleStart, int totalQuantity, ErrorCode expected) {
+      String situation, boolean changeSaleStart, int totalQuantity, ErrorCode expected) {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
     IfMatch ifMatch = IfMatch.parse(IfMatch.eTagOf(performance.getVersion()));
     reservationService.reserve(memberId, performance.getId(), 3);
     LocalDateTime saleStartAt =
-        delaySaleStart ? now.plusHours(1) : performance.getSalePeriod().saleStartAt();
+        changeSaleStart ? now.plusHours(1) : performance.getSalePeriod().saleStartAt();
 
     // when
     Throwable thrown =
@@ -353,6 +358,153 @@ class ReservationServiceTest {
   }
 
   @Test
+  @DisplayName("결제 제한 시각이 지난 예약 수량은 예약할 때 다시 판매한다")
+  void resellsExpiredQuantityOnReserve() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 1, 0);
+    Reservation expired = saveOverdue(performance, 1);
+
+    // when
+    Reservation reservation = reservationService.reserve(memberId, performance.getId(), 1);
+
+    // then
+    assertThat(storedStatusOf(expired)).isEqualTo(ReservationStatus.EXPIRED);
+    assertThat(storedStatusOf(reservation)).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+    assertThat(remainingOf(performance)).isZero();
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @DisplayName("만료된 예약은 공연 수정 시 예약 수량에 포함하지 않는다")
+  @MethodSource("expiredReservationUpdateCases")
+  void ignoresExpiredReservationsOnUpdate(
+      String situation, boolean changeSaleStart, int totalQuantity) {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    saveOverdue(performance, 3);
+    LocalDateTime saleStartAt =
+        changeSaleStart ? now.plusHours(1) : performance.getSalePeriod().saleStartAt();
+
+    // when
+    performanceService.update(
+        performance.getId(),
+        infoOf(performance, "공연", saleStartAt),
+        totalQuantity,
+        IfMatch.parse(IfMatch.eTagOf(performance.getVersion())));
+
+    // then
+    Performance saved = performanceRepository.findById(performance.getId()).orElseThrow();
+    PerformanceStock stock = stockRepository.findById(performance.getId()).orElseThrow();
+    assertThat(saved.getSalePeriod().saleStartAt()).isEqualTo(saleStartAt);
+    assertThat(stock.getTotalQuantity()).isEqualTo(totalQuantity);
+    assertThat(stock.getReservedQuantity()).isZero();
+  }
+
+  static Stream<Arguments> expiredReservationUpdateCases() {
+    return Stream.of(arguments("총 판매 수량 축소", false, 2), arguments("판매 시작 일시 변경", true, 100));
+  }
+
+  @Test
+  @DisplayName("스케줄러는 결제 제한 시각이 지난 예약만 만료하고 재고를 복구한다")
+  void schedulerExpiresOnlyOverdueReservations() {
+    // given
+    Performance first = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Performance second = save(now.minusDays(1), now.plusDays(1), 50, 0);
+    Reservation reserved = reservationService.reserve(memberId, first.getId(), 1);
+    Reservation overdueFirst = saveOverdue(first, 2);
+    Reservation overdueSecond = saveOverdue(second, 3);
+
+    // when
+    expiryScheduler.expireOverdue();
+
+    // then
+    assertThat(storedStatusOf(reserved)).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+    assertThat(storedStatusOf(overdueFirst)).isEqualTo(ReservationStatus.EXPIRED);
+    assertThat(storedStatusOf(overdueSecond)).isEqualTo(ReservationStatus.EXPIRED);
+    assertThat(remainingOf(first)).isEqualTo(99);
+    assertThat(remainingOf(second)).isEqualTo(50);
+  }
+
+  @Test
+  @DisplayName("스케줄러용 만료는 다른 트랜잭션이 재고 락을 보유하면 기다리지 않고 건너뛴다")
+  void expireOverdueDoesNotWaitForLockedPerformance() throws Exception {
+    // given
+    Performance lockedPerformance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation lockedOverdue = saveOverdue(lockedPerformance, 1);
+    Duration lockWaitTimeout =
+        Duration.ofSeconds(
+            Objects.requireNonNull(
+                jdbcTemplate.queryForObject("select @@innodb_lock_wait_timeout", Long.class)));
+    CountDownLatch locked = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+
+    try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+      Future<?> lockHolder =
+          executor.submit(
+              () ->
+                  transaction.executeWithoutResult(
+                      status -> {
+                        stockRepository.findByIdForUpdate(lockedPerformance.getId());
+                        locked.countDown();
+                        awaitRelease(release);
+                      }));
+      assertThat(locked.await(WAIT_LIMIT.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+
+      // when
+      assertTimeout(
+          lockWaitTimeout.dividedBy(2), // DB 락 대기 시간 초과와 경계가 겹치지 않게 절반으로 둔다
+          () -> reservationService.expireOverdue(lockedPerformance.getId()));
+
+      // then
+      assertThat(storedStatusOf(lockedOverdue)).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+      assertThat(remainingOf(lockedPerformance)).isEqualTo(99);
+      release.countDown();
+      lockHolder.get();
+    }
+  }
+
+  @Test
+  @DisplayName("스케줄러와 예약 신청이 같은 예약을 동시에 만료해도 재고를 중복으로 복구하지 않는다")
+  void releasesExpiredQuantityOnceUnderConcurrency() throws Exception {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 10, 0);
+    saveOverdue(performance, 3);
+
+    // when
+    List<Boolean> results =
+        runConcurrently(
+            List.of(
+                () -> succeeded(expiryScheduler::expireOverdue),
+                () ->
+                    succeeded(() -> reservationService.reserve(memberId, performance.getId(), 1))));
+
+    // then
+    assertThat(results).containsOnly(true);
+    assertThat(remainingOf(performance)).isEqualTo(9);
+  }
+
+  @ParameterizedTest(name = "제한 시각 {0}ns → {1}")
+  @DisplayName("재고 락을 획득할 때 결제 제한 시각 경계에서 예약을 만료한다")
+  @CsvSource({"-1, PENDING_PAYMENT", "0, EXPIRED"})
+  void expiresAtDeadlineBoundaryOnLock(long nanosFromDeadline, ReservationStatus status) {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 1);
+    Reservation reservation =
+        reservationRepository.save(Reservation.create(memberId, performance, 1, now));
+    LocalDateTime lockedAt = reservation.getPaymentDeadlineAt().plusNanos(nanosFromDeadline);
+    Clock fixed = Clock.fixed(lockedAt.atZone(clock.getZone()).toInstant(), clock.getZone());
+    PerformanceStockLocker locker =
+        new PerformanceStockLocker(stockRepository, overdueReservationExpirer, fixed);
+
+    // when
+    new TransactionTemplate(transactionManager)
+        .executeWithoutResult(s -> locker.lockAndExpireOverdue(performance.getId()));
+
+    // then
+    assertThat(storedStatusOf(reservation)).isEqualTo(status);
+  }
+
+  @Test
   @DisplayName("내 예약 목록을 조회하면 본인 예약만 최신순으로 공연 정보와 함께 반환한다")
   void returnsOnlyMyReservationsLatestFirst() {
     // given
@@ -386,7 +538,7 @@ class ReservationServiceTest {
   void includesExpiredWithoutStatusFilter() {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
-    Reservation expired = saveExpired(performance);
+    Reservation expired = saveOverdue(performance, 1);
     Reservation pending = reservationService.reserve(memberId, performance.getId(), 1);
 
     // when
@@ -406,7 +558,7 @@ class ReservationServiceTest {
   void filtersByStatus(Set<ReservationStatus> statuses, List<ReservationStatus> expected) {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
-    saveExpired(performance);
+    saveOverdue(performance, 1);
     reservationService.reserve(memberId, performance.getId(), 1);
 
     // when
@@ -451,7 +603,7 @@ class ReservationServiceTest {
   void showsExpiredInDetail() {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
-    Reservation expired = saveExpired(performance);
+    Reservation expired = saveOverdue(performance, 1);
 
     // when
     ReservationDetail detail = reservationService.getMyReservation(memberId, expired.getId());
@@ -502,9 +654,16 @@ class ReservationServiceTest {
     assertThat(thrown).satisfies(hasErrorCode(ErrorCode.RESERVATION_NOT_FOUND));
   }
 
-  private Reservation saveExpired(Performance performance) {
+  private Reservation saveOverdue(Performance performance, int quantity) {
+    PerformanceStock stock = stockRepository.findById(performance.getId()).orElseThrow();
+    stock.reserve(quantity);
+    stockRepository.save(stock);
     return reservationRepository.save(
-        Reservation.create(memberId, performance, 1, now.minusMinutes(11)));
+        Reservation.create(memberId, performance, quantity, now.minusMinutes(11)));
+  }
+
+  private ReservationStatus storedStatusOf(Reservation reservation) {
+    return reservationRepository.findById(reservation.getId()).orElseThrow().getStatus();
   }
 
   private Long otherMemberId() {

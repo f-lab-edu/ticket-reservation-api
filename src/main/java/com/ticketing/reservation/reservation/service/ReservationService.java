@@ -42,7 +42,7 @@ public class ReservationService {
 
   @Transactional
   public Reservation reserve(Long memberId, Long performanceId, int quantity) {
-    PerformanceStock stock = stockLocker.lock(performanceId);
+    PerformanceStock stock = stockLocker.lockAndExpireOverdue(performanceId);
     Performance performance =
         performanceRepository
             .findById(performanceId)
@@ -51,6 +51,11 @@ public class ReservationService {
         Reservation.create(memberId, performance, quantity, LocalDateTime.now(clock));
     stock.reserve(quantity);
     return reservationRepository.save(reservation);
+  }
+
+  @Transactional
+  public void expireOverdue(Long performanceId) {
+    stockLocker.tryLockAndExpireOverdue(performanceId);
   }
 
   @Transactional(readOnly = true)

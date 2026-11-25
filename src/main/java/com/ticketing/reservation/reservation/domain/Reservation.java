@@ -82,6 +82,13 @@ public class Reservation {
     return status;
   }
 
+  public void expire(LocalDateTime now) {
+    if (status != ReservationStatus.PENDING_PAYMENT || now.isBefore(paymentDeadlineAt)) {
+      throw new IllegalStateException("결제 제한 시각이 지난 결제 대기 예약만 만료할 수 있습니다: id=" + id);
+    }
+    this.status = ReservationStatus.EXPIRED;
+  }
+
   public Long getId() {
     return id;
   }
