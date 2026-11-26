@@ -29,7 +29,8 @@ public enum ErrorCode {
 
   // 예약
   NOT_ON_SALE(HttpStatus.CONFLICT, "판매 기간이 아닌 공연입니다."),
-  INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "잔여 판매 수량이 부족합니다.");
+  INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "잔여 판매 수량이 부족합니다."),
+  RESERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "예약을 찾을 수 없습니다.");
 
   private final HttpStatus status;
   private final String detail;

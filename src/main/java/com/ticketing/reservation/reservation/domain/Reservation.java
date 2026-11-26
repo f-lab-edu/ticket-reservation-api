@@ -75,6 +75,13 @@ public class Reservation {
     return timeLimit.isBefore(performanceAt) ? timeLimit : performanceAt;
   }
 
+  public ReservationStatus statusAt(LocalDateTime now) {
+    if (status == ReservationStatus.PENDING_PAYMENT && !now.isBefore(paymentDeadlineAt)) {
+      return ReservationStatus.EXPIRED;
+    }
+    return status;
+  }
+
   public Long getId() {
     return id;
   }

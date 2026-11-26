@@ -8,8 +8,11 @@ import com.ticketing.reservation.global.error.ErrorCode;
 import com.ticketing.reservation.performance.domain.Performance;
 import com.ticketing.reservation.performance.domain.PerformanceInfo;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class ReservationTest {
@@ -107,6 +110,36 @@ class ReservationTest {
         .isInstanceOfSatisfying(
             BusinessException.class,
             e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.NOT_ON_SALE));
+  }
+
+  @Test
+  @DisplayName("결제 제한 시각 전에 조회하면 결제 대기 상태를 반환한다")
+  void isPendingBeforeDeadline() {
+    // given
+    Reservation reservation = Reservation.create(7L, performance(NOW.plusDays(10), 50_000), 1, NOW);
+
+    // when
+    ReservationStatus status =
+        reservation.statusAt(reservation.getPaymentDeadlineAt().minus(1, ChronoUnit.MICROS));
+
+    // then
+    assertThat(status).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+  }
+
+  @ParameterizedTest(name = "제한 시각 + {0}μs")
+  @DisplayName("결제 제한 시각부터 조회하면 만료 상태를 반환한다")
+  @ValueSource(longs = {0, 1})
+  void isExpiredFromDeadline(long microsAfterDeadline) {
+    // given
+    Reservation reservation = Reservation.create(7L, performance(NOW.plusDays(10), 50_000), 1, NOW);
+
+    // when
+    ReservationStatus status =
+        reservation.statusAt(
+            reservation.getPaymentDeadlineAt().plus(microsAfterDeadline, ChronoUnit.MICROS));
+
+    // then
+    assertThat(status).isEqualTo(ReservationStatus.EXPIRED);
   }
 
   private static Performance performance(LocalDateTime performanceAt, int price) {
