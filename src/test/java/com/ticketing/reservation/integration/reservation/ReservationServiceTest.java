@@ -1,5 +1,7 @@
 package com.ticketing.reservation.integration.reservation;
 
+import static com.ticketing.reservation.integration.ConcurrencyTestSupport.runConcurrently;
+import static com.ticketing.reservation.integration.ConcurrencyTestSupport.runWhileOtherTransactionHoldsLock;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.tuple;
@@ -30,18 +32,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.*;
@@ -60,9 +53,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 class ReservationServiceTest {
-
-  private static final Duration LOCK_HOLD_LIMIT = Duration.ofSeconds(10);
-  private static final Duration WAIT_LIMIT = Duration.ofSeconds(10);
 
   @Autowired private ReservationService reservationService;
   @Autowired private PerformanceService performanceService;
@@ -153,33 +143,19 @@ class ReservationServiceTest {
   void rejectsWhenStockLockTimesOut() throws Exception {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
-    CountDownLatch locked = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
-    try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
-      Future<?> lockHolder =
-          executor.submit(
-              () ->
-                  transaction.executeWithoutResult(
-                      status -> {
-                        stockRepository.findByIdForUpdate(performance.getId());
-                        locked.countDown();
-                        awaitRelease(release);
-                      }));
-      assertThat(locked.await(WAIT_LIMIT.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+    // when
+    Throwable thrown =
+        runWhileOtherTransactionHoldsLock(
+            transactionManager,
+            () -> stockRepository.findByIdForUpdate(performance.getId()),
+            () ->
+                catchThrowable(() -> reservationService.reserve(memberId, performance.getId(), 1)));
 
-      // when
-      Throwable thrown =
-          catchThrowable(() -> reservationService.reserve(memberId, performance.getId(), 1));
-      release.countDown();
-      lockHolder.get();
-
-      // then
-      assertThat(thrown).satisfies(hasErrorCode(ErrorCode.STOCK_BUSY));
-      assertThat(remainingOf(performance)).isEqualTo(100);
-      assertThat(reservationRepository.count()).isZero();
-    }
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.STOCK_BUSY));
+    assertThat(remainingOf(performance)).isEqualTo(100);
+    assertThat(reservationRepository.count()).isZero();
   }
 
   @Test
@@ -434,33 +410,19 @@ class ReservationServiceTest {
         Duration.ofSeconds(
             Objects.requireNonNull(
                 jdbcTemplate.queryForObject("select @@innodb_lock_wait_timeout", Long.class)));
-    CountDownLatch locked = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
-    try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
-      Future<?> lockHolder =
-          executor.submit(
-              () ->
-                  transaction.executeWithoutResult(
-                      status -> {
-                        stockRepository.findByIdForUpdate(lockedPerformance.getId());
-                        locked.countDown();
-                        awaitRelease(release);
-                      }));
-      assertThat(locked.await(WAIT_LIMIT.toMillis(), TimeUnit.MILLISECONDS)).isTrue();
+    // when
+    runWhileOtherTransactionHoldsLock(
+        transactionManager,
+        () -> stockRepository.findByIdForUpdate(lockedPerformance.getId()),
+        () ->
+            assertTimeout(
+                lockWaitTimeout.dividedBy(2),
+                () -> reservationService.expireOverdue(lockedPerformance.getId())));
 
-      // when
-      assertTimeout(
-          lockWaitTimeout.dividedBy(2), // DB 락 대기 시간 초과와 경계가 겹치지 않게 절반으로 둔다
-          () -> reservationService.expireOverdue(lockedPerformance.getId()));
-
-      // then
-      assertThat(storedStatusOf(lockedOverdue)).isEqualTo(ReservationStatus.PENDING_PAYMENT);
-      assertThat(remainingOf(lockedPerformance)).isEqualTo(99);
-      release.countDown();
-      lockHolder.get();
-    }
+    // then
+    assertThat(storedStatusOf(lockedOverdue)).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+    assertThat(remainingOf(lockedPerformance)).isEqualTo(99);
   }
 
   @Test
@@ -706,49 +668,12 @@ class ReservationServiceTest {
                 BusinessException.class, e -> assertThat(e.getErrorCode()).isEqualTo(errorCode));
   }
 
-  private static void awaitRelease(CountDownLatch latch) {
-    try {
-      if (!latch.await(LOCK_HOLD_LIMIT.toMillis(), TimeUnit.MILLISECONDS)) {
-        throw new IllegalStateException("재고 락 점유 제한 시간 초과");
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IllegalStateException("재고 락 점유 스레드가 중단되었습니다", e);
-    }
-  }
-
   private static boolean succeeded(Runnable task) {
     try {
       task.run();
       return true;
     } catch (BusinessException e) {
       return false;
-    }
-  }
-
-  private static <T> List<T> runConcurrently(int threadCount, Callable<T> task) throws Exception {
-    return runConcurrently(Collections.nCopies(threadCount, task));
-  }
-
-  private static <T> List<T> runConcurrently(List<Callable<T>> tasks) throws Exception {
-    CyclicBarrier start = new CyclicBarrier(tasks.size());
-
-    try (ExecutorService executor = Executors.newFixedThreadPool(tasks.size())) {
-      List<Future<T>> futures = new ArrayList<>();
-      for (Callable<T> task : tasks) {
-        futures.add(
-            executor.submit(
-                () -> {
-                  start.await(WAIT_LIMIT.toMillis(), TimeUnit.MILLISECONDS);
-                  return task.call();
-                }));
-      }
-
-      List<T> results = new ArrayList<>();
-      for (Future<T> future : futures) {
-        results.add(future.get(WAIT_LIMIT.toMillis(), TimeUnit.MILLISECONDS));
-      }
-      return results;
     }
   }
 }
