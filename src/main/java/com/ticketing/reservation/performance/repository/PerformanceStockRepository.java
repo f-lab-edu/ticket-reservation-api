@@ -13,4 +13,15 @@ public interface PerformanceStockRepository extends JpaRepository<PerformanceSto
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select s from PerformanceStock s where s.performanceId = :performanceId")
   Optional<PerformanceStock> findByIdForUpdate(@Param("performanceId") Long performanceId);
+
+  @Query(
+      value =
+          """
+          select * from performance_stock
+          where performance_id = :performanceId
+          for update skip locked
+          """,
+      nativeQuery = true)
+  Optional<PerformanceStock> findByIdForUpdateSkipLocked(
+      @Param("performanceId") Long performanceId);
 }

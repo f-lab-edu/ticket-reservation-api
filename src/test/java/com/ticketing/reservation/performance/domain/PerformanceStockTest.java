@@ -7,6 +7,8 @@ import com.ticketing.reservation.global.error.BusinessException;
 import com.ticketing.reservation.global.error.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class PerformanceStockTest {
@@ -100,6 +102,35 @@ class PerformanceStockTest {
               assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INSUFFICIENT_STOCK);
               assertThat(e.getProperties()).containsEntry("remainingQuantity", 70);
             });
+    assertThat(stock.getReservedQuantity()).isEqualTo(30);
+  }
+
+  @Test
+  @DisplayName("재고를 복구하면 예약 수량이 줄어든다")
+  void releasesQuantity() {
+    // given
+    PerformanceStock stock = stock(100, 30);
+
+    // when
+    stock.release(30);
+
+    // then
+    assertThat(stock.getReservedQuantity()).isZero();
+    assertThat(stock.hasReservation()).isFalse();
+  }
+
+  @ParameterizedTest(name = "{0}개")
+  @DisplayName("0 미만이거나 예약 수량보다 많은 수량은 복구할 수 없다")
+  @ValueSource(ints = {-1, 31})
+  void rejectsReleaseOutOfRange(int quantity) {
+    // given
+    PerformanceStock stock = stock(100, 30);
+
+    // when
+    Throwable thrown = catchThrowable(() -> stock.release(quantity));
+
+    // then
+    assertThat(thrown).isInstanceOf(IllegalStateException.class);
     assertThat(stock.getReservedQuantity()).isEqualTo(30);
   }
 

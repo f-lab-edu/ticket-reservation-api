@@ -19,10 +19,10 @@ class PerformanceStockLockerTest {
   @Autowired private PerformanceStockLocker stockLocker;
 
   @Test
-  @DisplayName("트랜잭션 없이 재고를 잠그면 거절한다")
+  @DisplayName("트랜잭션 없이 재고 락을 획득하려 하면 거절한다")
   void rejectsLockWithoutTransaction() {
     // when
-    Throwable thrown = catchThrowable(() -> stockLocker.lock(1L));
+    Throwable thrown = catchThrowable(() -> stockLocker.lockAndExpireOverdue(1L));
 
     // then
     assertThat(thrown).isInstanceOf(IllegalTransactionStateException.class);

@@ -42,6 +42,17 @@ public class PerformanceStock {
     this.reservedQuantity += quantity;
   }
 
+  public void release(int quantity) {
+    if (quantity < 0 || quantity > reservedQuantity) {
+      throw new IllegalStateException(
+          "복구할 수량은 0 이상 예약 수량 이하여야 합니다: quantity="
+              + quantity
+              + ", reservedQuantity="
+              + reservedQuantity);
+    }
+    this.reservedQuantity -= quantity;
+  }
+
   public boolean hasReservation() {
     return reservedQuantity > 0;
   }

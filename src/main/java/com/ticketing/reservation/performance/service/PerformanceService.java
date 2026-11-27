@@ -50,7 +50,7 @@ public class PerformanceService {
   @Transactional
   public PerformanceDetail update(
       Long performanceId, PerformanceInfo info, int totalQuantity, IfMatch ifMatch) {
-    PerformanceStock stock = stockLocker.lock(performanceId);
+    PerformanceStock stock = stockLocker.lockAndExpireOverdue(performanceId);
     Performance performance =
         performanceRepository
             .findById(performanceId)

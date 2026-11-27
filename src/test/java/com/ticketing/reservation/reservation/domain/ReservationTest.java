@@ -142,6 +142,50 @@ class ReservationTest {
     assertThat(status).isEqualTo(ReservationStatus.EXPIRED);
   }
 
+  @Test
+  @DisplayName("결제 제한 시각에 도달하면 만료된다")
+  void expiresFromDeadline() {
+    // given
+    Reservation reservation = Reservation.create(7L, performance(NOW.plusDays(10), 50_000), 1, NOW);
+
+    // when
+    reservation.expire(reservation.getPaymentDeadlineAt());
+
+    // then
+    assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.EXPIRED);
+  }
+
+  @Test
+  @DisplayName("결제 제한 시각 전에는 만료할 수 없다")
+  void rejectsExpireBeforeDeadline() {
+    // given
+    Reservation reservation = Reservation.create(7L, performance(NOW.plusDays(10), 50_000), 1, NOW);
+
+    // when
+    Throwable thrown =
+        catchThrowable(
+            () ->
+                reservation.expire(reservation.getPaymentDeadlineAt().minus(1, ChronoUnit.MICROS)));
+
+    // then
+    assertThat(thrown).isInstanceOf(IllegalStateException.class);
+    assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+  }
+
+  @Test
+  @DisplayName("이미 만료된 예약은 다시 만료할 수 없다")
+  void rejectsExpireTwice() {
+    // given
+    Reservation reservation = Reservation.create(7L, performance(NOW.plusDays(10), 50_000), 1, NOW);
+    reservation.expire(reservation.getPaymentDeadlineAt());
+
+    // when
+    Throwable thrown = catchThrowable(() -> reservation.expire(reservation.getPaymentDeadlineAt()));
+
+    // then
+    assertThat(thrown).isInstanceOf(IllegalStateException.class);
+  }
+
   private static Performance performance(LocalDateTime performanceAt, int price) {
     LocalDateTime saleStartAt = NOW.minusDays(1);
     Performance performance =
