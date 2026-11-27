@@ -1,5 +1,7 @@
 package com.ticketing.reservation.integration;
 
+import static org.awaitility.Awaitility.await;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -130,26 +132,29 @@ public final class ConcurrencyTestSupport {
   }
 
   private static void awaitLockWait(
-      JdbcTemplate jdbcTemplate, long lockHolderThreadId, Future<?> waiter) throws Exception {
-    long deadline = System.nanoTime() + WAIT_LIMIT.toNanos();
-    while (System.nanoTime() < deadline) {
-      int waiting =
-          Objects.requireNonNull(
-              jdbcTemplate.queryForObject(
-                  "select count(*) from performance_schema.data_lock_waits"
-                      + " where blocking_thread_id = ?",
-                  Integer.class,
-                  lockHolderThreadId));
-      if (waiting > 0) {
-        return;
-      }
-      if (waiter.isDone()) {
-        waiter.get();
-        throw new IllegalStateException("action이 락을 기다리지 않고 끝났습니다");
-      }
-      Thread.sleep(10);
-    }
-    throw new IllegalStateException("action의 락 대기 확인 시간 초과");
+      JdbcTemplate jdbcTemplate, long lockHolderThreadId, Future<?> waiter) {
+    await("action의 락 대기 확인")
+        .atMost(WAIT_LIMIT)
+        .pollInterval(Duration.ofMillis(10))
+        .until(
+            () -> {
+              if (lockWaitCount(jdbcTemplate, lockHolderThreadId) > 0) {
+                return true;
+              }
+              if (waiter.isDone()) {
+                waiter.get();
+                throw new IllegalStateException("action이 락을 기다리지 않고 끝났습니다");
+              }
+              return false;
+            });
+  }
+
+  private static int lockWaitCount(JdbcTemplate jdbcTemplate, long lockHolderThreadId) {
+    return Objects.requireNonNull(
+        jdbcTemplate.queryForObject(
+            "select count(*) from performance_schema.data_lock_waits where blocking_thread_id = ?",
+            Integer.class,
+            lockHolderThreadId));
   }
 
   public static void runWhileOtherTransactionHoldsLock(
