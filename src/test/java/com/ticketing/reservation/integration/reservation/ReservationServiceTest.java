@@ -1,5 +1,6 @@
 package com.ticketing.reservation.integration.reservation;
 
+import static com.ticketing.reservation.integration.ConcurrencyTestSupport.runBlockedByOtherTransactionLock;
 import static com.ticketing.reservation.integration.ConcurrencyTestSupport.runConcurrently;
 import static com.ticketing.reservation.integration.ConcurrencyTestSupport.runWhileOtherTransactionHoldsLock;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -139,7 +140,7 @@ class ReservationServiceTest {
   }
 
   @Test
-  @DisplayName("재고 락을 제한 시간 안에 획득하지 못하면 재고 혼잡 오류를 반환한다")
+  @DisplayName("예약 신청 시 재고 락을 제한 시간 안에 획득하지 못하면 재고 혼잡 오류를 반환한다")
   void rejectsWhenStockLockTimesOut() throws Exception {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
@@ -156,6 +157,35 @@ class ReservationServiceTest {
     assertThat(thrown).satisfies(hasErrorCode(ErrorCode.STOCK_BUSY));
     assertThat(remainingOf(performance)).isEqualTo(100);
     assertThat(reservationRepository.count()).isZero();
+  }
+
+  @Test
+  @DisplayName("공연 수정 시 재고 락을 제한 시간 안에 획득하지 못하면 재고 혼잡 오류를 반환한다")
+  void rejectsUpdateWhenStockLockTimesOut() throws Exception {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+
+    // when
+    Throwable thrown =
+        runWhileOtherTransactionHoldsLock(
+            transactionManager,
+            () -> stockRepository.findByIdForUpdate(performance.getId()),
+            () ->
+                catchThrowable(
+                    () ->
+                        performanceService.update(
+                            performance.getId(),
+                            infoOf(
+                                performance, "수정된 공연", performance.getSalePeriod().saleStartAt()),
+                            50,
+                            IfMatch.parse(IfMatch.eTagOf(performance.getVersion())))));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.STOCK_BUSY));
+    assertThat(performanceRepository.findById(performance.getId()).orElseThrow().getVersion())
+        .isEqualTo(performance.getVersion());
+    assertThat(stockRepository.findById(performance.getId()).orElseThrow().getTotalQuantity())
+        .isEqualTo(100);
   }
 
   @Test
@@ -188,47 +218,188 @@ class ReservationServiceTest {
   }
 
   @Test
-  @DisplayName("총 판매 수량 수정과 예약이 동시에 일어나도 예약 수량이 총 판매 수량을 넘지 않는다")
-  void keepsStockConsistentWhenUpdateAndReservationRace() throws Exception {
+  @DisplayName("같은 공연에 처리 중인 예약이 있으면 다음 예약은 기다렸다가 성공한다")
+  void waitsForStockLockOnSamePerformance() throws Exception {
     // given
-    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 80);
-    PerformanceInfo info =
-        new PerformanceInfo(
-            "공연",
-            "공연장",
-            performance.getPerformanceAt(),
-            50_000,
-            performance.getSalePeriod().saleStartAt(),
-            performance.getSalePeriod().saleEndAt());
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
 
     // when
-    List<Boolean> results =
-        runConcurrently(
-            List.of(
-                () ->
-                    succeeded(
-                        () ->
-                            performanceService.update(
-                                performance.getId(),
-                                info,
-                                80,
-                                IfMatch.parse(IfMatch.eTagOf(performance.getVersion())))),
-                () ->
-                    succeeded(
-                        () -> reservationService.reserve(memberId, performance.getId(), 10))));
+    runBlockedByOtherTransactionLock(
+        transactionManager,
+        jdbcTemplate,
+        () -> reservationService.reserve(memberId, performance.getId(), 1),
+        () -> reservationService.reserve(memberId, performance.getId(), 1));
 
     // then
-    assertThat(results).containsExactlyInAnyOrder(true, false);
+    assertThat(remainingOf(performance)).isEqualTo(98);
+    assertThat(reservationRepository.count()).isEqualTo(2);
+  }
+
+  @Test
+  @DisplayName("다른 공연의 예약이 처리 중이어도 예약할 수 있다")
+  void reservesDifferentPerformancesConcurrently() throws Exception {
+    // given
+    Performance first = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Performance second = save(now.minusDays(1), now.plusDays(1), 100, 0);
+
+    // when
+    runWhileOtherTransactionHoldsLock(
+        transactionManager,
+        () -> reservationService.reserve(memberId, first.getId(), 1),
+        () -> reservationService.reserve(memberId, second.getId(), 1));
+
+    // then
+    assertThat(reservationRepository.count()).isEqualTo(2);
+  }
+
+  @Test
+  @DisplayName("다른 공연의 수정이 처리 중이어도 예약할 수 있다")
+  void updatesAndReservesDifferentPerformancesConcurrently() throws Exception {
+    // given
+    Performance updated = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Performance reserved = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    saveOverdue(updated, 1);
+
+    // when
+    runWhileOtherTransactionHoldsLock(
+        transactionManager,
+        () -> update(updated),
+        () -> reservationService.reserve(memberId, reserved.getId(), 1));
+
+    // then
+    assertThat(remainingOf(reserved)).isEqualTo(99);
+  }
+
+  @Test
+  @DisplayName("다른 공연의 수정이 처리 중이어도 공연을 수정할 수 있다")
+  void updatesDifferentPerformancesConcurrently() throws Exception {
+    // given
+    Performance first = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Performance second = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation firstOverdue = saveOverdue(first, 1);
+    saveOverdue(second, 1);
+
+    // when
+    runWhileOtherTransactionHoldsLock(
+        transactionManager, () -> update(second), () -> update(first));
+
+    // then
+    assertThat(performanceRepository.findById(first.getId()).orElseThrow().getTitle())
+        .isEqualTo("수정된 공연");
+    assertThat(storedStatusOf(firstOverdue)).isEqualTo(ReservationStatus.EXPIRED);
+  }
+
+  @Test
+  @DisplayName("다른 공연의 만료 처리가 진행 중이어도 예약할 수 있다")
+  void expiresAndReservesDifferentPerformancesConcurrently() throws Exception {
+    // given
+    Performance expired = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Performance reserved = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    saveOverdue(expired, 1);
+
+    // when
+    runWhileOtherTransactionHoldsLock(
+        transactionManager,
+        () -> reservationService.expireOverdue(expired.getId()),
+        () -> reservationService.reserve(memberId, reserved.getId(), 1));
+
+    // then
+    assertThat(remainingOf(reserved)).isEqualTo(99);
+  }
+
+  @Test
+  @DisplayName("다른 공연의 만료 처리가 진행 중이어도 공연을 수정할 수 있다")
+  void expiresAndUpdatesDifferentPerformancesConcurrently() throws Exception {
+    // given
+    Performance updated = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Performance expired = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation updatedOverdue = saveOverdue(updated, 1);
+    saveOverdue(expired, 1);
+
+    // when
+    runWhileOtherTransactionHoldsLock(
+        transactionManager,
+        () -> reservationService.expireOverdue(expired.getId()),
+        () -> update(updated));
+
+    // then
+    assertThat(performanceRepository.findById(updated.getId()).orElseThrow().getTitle())
+        .isEqualTo("수정된 공연");
+    assertThat(storedStatusOf(updatedOverdue)).isEqualTo(ReservationStatus.EXPIRED);
+  }
+
+  @Test
+  @DisplayName("다른 공연의 만료 처리가 진행 중이어도 만료 처리할 수 있다")
+  void expiresDifferentPerformancesConcurrently() throws Exception {
+    // given
+    Performance first = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Performance second = save(now.minusDays(1), now.plusDays(1), 100, 0);
+    Reservation firstOverdue = saveOverdue(first, 1);
+    saveOverdue(second, 1);
+
+    // when
+    runWhileOtherTransactionHoldsLock(
+        transactionManager,
+        () -> reservationService.expireOverdue(second.getId()),
+        () -> reservationService.expireOverdue(first.getId()));
+
+    // then
+    assertThat(storedStatusOf(firstOverdue)).isEqualTo(ReservationStatus.EXPIRED);
+  }
+
+  @Test
+  @DisplayName("수정 중인 공연을 예약하면 수정이 끝난 재고를 기준으로 판단한다")
+  void reservesAgainstStockUpdatedByWaitedUpdate() throws Exception {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 80);
+
+    // when
+    Throwable thrown =
+        runBlockedByOtherTransactionLock(
+            transactionManager,
+            jdbcTemplate,
+            () ->
+                performanceService.update(
+                    performance.getId(),
+                    infoOf(performance, "공연", performance.getSalePeriod().saleStartAt()),
+                    80,
+                    IfMatch.parse(IfMatch.eTagOf(performance.getVersion()))),
+            () ->
+                catchThrowable(
+                    () -> reservationService.reserve(memberId, performance.getId(), 10)));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.INSUFFICIENT_STOCK));
+    assertThat(remainingOf(performance)).isZero();
+    assertThat(reservationRepository.count()).isZero();
+  }
+
+  @Test
+  @DisplayName("예약 중인 공연을 수정하면 예약이 끝난 재고를 기준으로 판단한다")
+  void updatesAgainstStockReservedByWaitedReservation() throws Exception {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 80);
+
+    // when
+    Throwable thrown =
+        runBlockedByOtherTransactionLock(
+            transactionManager,
+            jdbcTemplate,
+            () -> reservationService.reserve(memberId, performance.getId(), 10),
+            () ->
+                catchThrowable(
+                    () ->
+                        performanceService.update(
+                            performance.getId(),
+                            infoOf(performance, "공연", performance.getSalePeriod().saleStartAt()),
+                            80,
+                            IfMatch.parse(IfMatch.eTagOf(performance.getVersion())))));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED));
     PerformanceStock stock = stockRepository.findById(performance.getId()).orElseThrow();
-    assertThat(stock.getRemainingQuantity()).isGreaterThanOrEqualTo(0);
-    boolean updateSucceeded = results.getFirst();
-    if (updateSucceeded) {
-      assertThat(stock.getTotalQuantity()).isEqualTo(80);
-      assertThat(stock.getRemainingQuantity()).isZero();
-    } else {
-      assertThat(stock.getTotalQuantity()).isEqualTo(100);
-      assertThat(stock.getRemainingQuantity()).isEqualTo(10);
-    }
+    assertThat(stock.getTotalQuantity()).isEqualTo(100);
+    assertThat(stock.getRemainingQuantity()).isEqualTo(10);
   }
 
   @Test
@@ -290,51 +461,61 @@ class ReservationServiceTest {
   }
 
   @Test
-  @DisplayName("판매 시작 일시 수정과 첫 예약이 동시에 일어나도 둘 중 하나만 성공한다")
-  void allowsOnlyOneOfSaleStartChangeAndFirstReservation() throws Exception {
+  @DisplayName("판매 시작 일시 수정이 먼저 처리되면 동시에 요청된 첫 예약은 거절한다")
+  void rejectsFirstReservationWaitingForSaleStartChange() throws Exception {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
     LocalDateTime delayedSaleStartAt = now.plusHours(1);
-    PerformanceInfo info =
-        new PerformanceInfo(
-            "공연",
-            "공연장",
-            performance.getPerformanceAt(),
-            50_000,
-            delayedSaleStartAt,
-            performance.getSalePeriod().saleEndAt());
 
     // when
-    List<Boolean> results =
-        runConcurrently(
-            List.of(
-                () ->
-                    succeeded(
-                        () ->
-                            performanceService.update(
-                                performance.getId(),
-                                info,
-                                100,
-                                IfMatch.parse(IfMatch.eTagOf(performance.getVersion())))),
-                () ->
-                    succeeded(() -> reservationService.reserve(memberId, performance.getId(), 1))));
+    Throwable thrown =
+        runBlockedByOtherTransactionLock(
+            transactionManager,
+            jdbcTemplate,
+            () -> updateSaleStartAt(performance, delayedSaleStartAt),
+            () ->
+                catchThrowable(() -> reservationService.reserve(memberId, performance.getId(), 1)));
 
     // then
-    assertThat(results).containsExactlyInAnyOrder(true, false);
-    Performance saved = performanceRepository.findById(performance.getId()).orElseThrow();
-    boolean updateSucceeded = results.getFirst();
-    if (updateSucceeded) {
-      assertThat(saved.getSalePeriod().saleStartAt()).isEqualTo(delayedSaleStartAt);
-      assertThat(reservationRepository.count()).isZero();
-    } else {
-      assertThat(saved.getSalePeriod().saleStartAt())
-          .isEqualTo(performance.getSalePeriod().saleStartAt());
-      assertThat(reservationRepository.count()).isOne();
-    }
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.NOT_ON_SALE));
+    assertThat(
+            performanceRepository
+                .findById(performance.getId())
+                .orElseThrow()
+                .getSalePeriod()
+                .saleStartAt())
+        .isEqualTo(delayedSaleStartAt);
+    assertThat(reservationRepository.count()).isZero();
   }
 
   @Test
-  @DisplayName("결제 제한 시각이 지난 예약 수량은 예약할 때 다시 판매한다")
+  @DisplayName("첫 예약이 먼저 처리되면 동시에 요청된 판매 시작 일시 수정은 거절한다")
+  void rejectsSaleStartChangeWaitingForFirstReservation() throws Exception {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 0);
+
+    // when
+    Throwable thrown =
+        runBlockedByOtherTransactionLock(
+            transactionManager,
+            jdbcTemplate,
+            () -> reservationService.reserve(memberId, performance.getId(), 1),
+            () -> catchThrowable(() -> updateSaleStartAt(performance, now.plusHours(1))));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED));
+    assertThat(
+            performanceRepository
+                .findById(performance.getId())
+                .orElseThrow()
+                .getSalePeriod()
+                .saleStartAt())
+        .isEqualTo(performance.getSalePeriod().saleStartAt());
+    assertThat(reservationRepository.count()).isOne();
+  }
+
+  @Test
+  @DisplayName("결제 제한 시각이 지난 예약 수량은 예약 신청 시 다시 판매한다")
   void resellsExpiredQuantityOnReserve() {
     // given
     Performance performance = save(now.minusDays(1), now.plusDays(1), 1, 0);
@@ -347,6 +528,49 @@ class ReservationServiceTest {
     assertThat(storedStatusOf(expired)).isEqualTo(ReservationStatus.EXPIRED);
     assertThat(storedStatusOf(reservation)).isEqualTo(ReservationStatus.PENDING_PAYMENT);
     assertThat(remainingOf(performance)).isZero();
+  }
+
+  @Test
+  @DisplayName("예약 신청이 거절되면 함께 처리한 예약 만료도 취소된다")
+  void rollsBackExpiryWhenReservationIsRejected() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 10, 8);
+    Reservation overdue = saveOverdue(performance, 1);
+
+    // when
+    Throwable thrown =
+        catchThrowable(() -> reservationService.reserve(memberId, performance.getId(), 3));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.INSUFFICIENT_STOCK));
+    assertThat(((BusinessException) thrown).getProperties()).containsEntry("remainingQuantity", 2);
+    assertThat(storedStatusOf(overdue)).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+    assertThat(remainingOf(performance)).isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("공연 수정이 거절되면 함께 처리한 예약 만료도 취소된다")
+  void rollsBackExpiryWhenUpdateIsRejected() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 100, 5);
+    Reservation overdue = saveOverdue(performance, 3);
+
+    // when
+    Throwable thrown =
+        catchThrowable(
+            () ->
+                performanceService.update(
+                    performance.getId(),
+                    infoOf(performance, "공연", performance.getSalePeriod().saleStartAt()),
+                    4,
+                    IfMatch.parse(IfMatch.eTagOf(performance.getVersion()))));
+
+    // then
+    assertThat(thrown).satisfies(hasErrorCode(ErrorCode.TOTAL_QUANTITY_BELOW_RESERVED));
+    assertThat(((BusinessException) thrown).getProperties()).containsEntry("reservedQuantity", 5);
+    assertThat(storedStatusOf(overdue)).isEqualTo(ReservationStatus.PENDING_PAYMENT);
+    assertThat(stockRepository.findById(performance.getId()).orElseThrow().getReservedQuantity())
+        .isEqualTo(8);
   }
 
   @ParameterizedTest(name = "{0}")
@@ -380,6 +604,22 @@ class ReservationServiceTest {
   }
 
   @Test
+  @DisplayName("이미 만료된 예약은 스케줄러가 다시 만료하지 않는다")
+  void schedulerSkipsAlreadyExpiredReservations() {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 10, 0);
+    Reservation overdue = saveOverdue(performance, 3);
+    reservationService.reserve(memberId, performance.getId(), 1);
+
+    // when
+    expiryScheduler.expireOverdue();
+
+    // then
+    assertThat(storedStatusOf(overdue)).isEqualTo(ReservationStatus.EXPIRED);
+    assertThat(remainingOf(performance)).isEqualTo(9);
+  }
+
+  @Test
   @DisplayName("스케줄러는 결제 제한 시각이 지난 예약만 만료하고 재고를 복구한다")
   void schedulerExpiresOnlyOverdueReservations() {
     // given
@@ -401,7 +641,7 @@ class ReservationServiceTest {
   }
 
   @Test
-  @DisplayName("스케줄러용 만료는 다른 트랜잭션이 재고 락을 보유하면 기다리지 않고 건너뛴다")
+  @DisplayName("스케줄러는 다른 트랜잭션이 재고 락을 보유한 공연을 기다리지 않고 건너뛴다")
   void expireOverdueDoesNotWaitForLockedPerformance() throws Exception {
     // given
     Performance lockedPerformance = save(now.minusDays(1), now.plusDays(1), 100, 0);
@@ -433,20 +673,44 @@ class ReservationServiceTest {
     saveOverdue(performance, 3);
 
     // when
-    List<Boolean> results =
-        runConcurrently(
-            List.of(
-                () -> succeeded(expiryScheduler::expireOverdue),
-                () ->
-                    succeeded(() -> reservationService.reserve(memberId, performance.getId(), 1))));
+    runBlockedByOtherTransactionLock(
+        transactionManager,
+        jdbcTemplate,
+        () -> stockLocker.tryLockAndExpireOverdue(performance.getId()),
+        () -> reservationService.reserve(memberId, performance.getId(), 1));
 
     // then
-    assertThat(results).containsOnly(true);
     assertThat(remainingOf(performance)).isEqualTo(9);
   }
 
+  @Test
+  @DisplayName("만료 처리 중인 공연을 수정하면 만료가 반영된 예약 수량을 기준으로 판단한다")
+  void updatesAgainstStockReleasedByWaitedExpiry() throws Exception {
+    // given
+    Performance performance = save(now.minusDays(1), now.plusDays(1), 10, 0);
+    Reservation overdue = saveOverdue(performance, 3);
+
+    // when
+    runBlockedByOtherTransactionLock(
+        transactionManager,
+        jdbcTemplate,
+        () -> stockLocker.tryLockAndExpireOverdue(performance.getId()),
+        () ->
+            performanceService.update(
+                performance.getId(),
+                infoOf(performance, "공연", performance.getSalePeriod().saleStartAt()),
+                2,
+                IfMatch.parse(IfMatch.eTagOf(performance.getVersion()))));
+
+    // then
+    PerformanceStock stock = stockRepository.findById(performance.getId()).orElseThrow();
+    assertThat(stock.getTotalQuantity()).isEqualTo(2);
+    assertThat(stock.getReservedQuantity()).isZero();
+    assertThat(storedStatusOf(overdue)).isEqualTo(ReservationStatus.EXPIRED);
+  }
+
   @ParameterizedTest(name = "제한 시각 {0}ns → {1}")
-  @DisplayName("재고 락을 획득할 때 결제 제한 시각 경계에서 예약을 만료한다")
+  @DisplayName("재고 락 획득 시 결제 제한 시각 경계를 기준으로 예약을 만료한다")
   @CsvSource({"-1, PENDING_PAYMENT", "0, EXPIRED"})
   void expiresAtDeadlineBoundaryOnLock(long nanosFromDeadline, ReservationStatus status) {
     // given
@@ -644,6 +908,22 @@ class ReservationServiceTest {
     ReflectionTestUtils.setField(stock, "reservedQuantity", reservedQuantity);
     stockRepository.save(stock);
     return performance;
+  }
+
+  private void update(Performance performance) {
+    performanceService.update(
+        performance.getId(),
+        infoOf(performance, "수정된 공연", performance.getSalePeriod().saleStartAt()),
+        100,
+        IfMatch.parse(IfMatch.eTagOf(performance.getVersion())));
+  }
+
+  private void updateSaleStartAt(Performance performance, LocalDateTime saleStartAt) {
+    performanceService.update(
+        performance.getId(),
+        infoOf(performance, "공연", saleStartAt),
+        100,
+        IfMatch.parse(IfMatch.eTagOf(performance.getVersion())));
   }
 
   private static PerformanceInfo infoOf(
