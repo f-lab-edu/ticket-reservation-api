@@ -459,7 +459,7 @@ If-Match: "0"
 | `TOTAL_QUANTITY_BELOW_RESERVED` | 409 | 총 판매 수량이 이미 예약된 수량보다 적음. 처리 시점의 예약 수량을 `reservedQuantity`로 함께 반환 (4.8.1.2.3.1) |
 | `PERFORMANCE_MODIFIED` | 412 | `If-Match`가 현재 공연 정보의 `ETag`와 일치하지 않음 (다른 수정이 먼저 반영됨) |
 | `IF_MATCH_REQUIRED` | 428 | `If-Match` 헤더가 없거나, `*`가 들어 있거나, 형식에 맞는 ETag가 정확히 하나가 아님 |
-| `STOCK_BUSY` | 503 | 같은 공연의 예약·수정 요청이 몰려 재고 잠금을 3초 안에 얻지 못함 |
+| `STOCK_BUSY` | 503 | 같은 공연의 예약·수정 요청이 몰려 재고 락을 3초 안에 얻지 못함 |
 
 ```json
 {
@@ -576,7 +576,7 @@ If-Match: "0"
 | `PERFORMANCE_NOT_FOUND` | 404 | 공연이 존재하지 않음 |
 | `NOT_ON_SALE` | 409 | 판매 시작 일시 ≤ 현재 시각 < 판매 종료 일시를 만족하지 않음 |
 | `INSUFFICIENT_STOCK` | 409 | 예약 수량 > 잔여 판매 수량. 처리 시점의 잔여 판매 수량을 `remainingQuantity`로 함께 반환 (4.9.1.1.3) |
-| `STOCK_BUSY` | 503 | 같은 공연의 예약·수정 요청이 몰려 재고 잠금을 3초 안에 얻지 못함 |
+| `STOCK_BUSY` | 503 | 같은 공연의 예약·수정 요청이 몰려 재고 락을 3초 안에 얻지 못함 |
 
 ```json
 {
