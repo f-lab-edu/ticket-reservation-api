@@ -32,16 +32,26 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
   Optional<Reservation> findByIdAndMemberId(Long id, Long memberId);
 
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       """
-      select r from Reservation r
+      select r.id from Reservation r
       where r.performanceId = :performanceId
         and r.status = PENDING_PAYMENT
         and r.paymentDeadlineAt <= :now
       """)
-  List<Reservation> findOverdueForUpdate(
+  List<Long> findOverdueIds(
       @Param("performanceId") Long performanceId, @Param("now") LocalDateTime now);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      """
+      select r from Reservation r
+      where r.id in :ids
+        and r.status = PENDING_PAYMENT
+        and r.paymentDeadlineAt <= :now
+      """)
+  List<Reservation> findOverdueByIdsForUpdate(
+      @Param("ids") Collection<Long> ids, @Param("now") LocalDateTime now);
 
   @Query(
       """

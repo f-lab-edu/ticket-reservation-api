@@ -26,8 +26,11 @@ public class ReservationExpirer implements OverdueReservationExpirer {
   @Override
   @Transactional(propagation = Propagation.MANDATORY)
   public void expireOverdue(PerformanceStock stock, LocalDateTime now) {
-    List<Reservation> overdue =
-        reservationRepository.findOverdueForUpdate(stock.getPerformanceId(), now);
+    List<Long> overdueIds = reservationRepository.findOverdueIds(stock.getPerformanceId(), now);
+    if (overdueIds.isEmpty()) {
+      return;
+    }
+    List<Reservation> overdue = reservationRepository.findOverdueByIdsForUpdate(overdueIds, now);
     if (overdue.isEmpty()) {
       return;
     }

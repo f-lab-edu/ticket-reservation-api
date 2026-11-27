@@ -36,7 +36,9 @@ class ReservationExpirerTest {
     Reservation first = overdue(performance, 2);
     Reservation second = overdue(performance, 3);
     PerformanceStock stock = stockWithReserved(5);
-    given(reservationRepository.findOverdueForUpdate(1L, NOW)).willReturn(List.of(first, second));
+    given(reservationRepository.findOverdueIds(1L, NOW)).willReturn(List.of(10L, 11L));
+    given(reservationRepository.findOverdueByIdsForUpdate(List.of(10L, 11L), NOW))
+        .willReturn(List.of(first, second));
 
     // when
     reservationExpirer.expireOverdue(stock, NOW);
